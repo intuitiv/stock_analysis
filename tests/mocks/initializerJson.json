@@ -1,0 +1,182 @@
+{
+  "initializationJsonPath": "/config/initializerJson.json",
+  "mockServerInitializers": [
+    {
+      "name": "OpenAI API Mock",
+      "expectations": [
+        {
+          "httpRequest": {
+            "method": "POST",
+            "path": "/v1/chat/completions",
+            "headers": {
+              "Authorization": ["Bearer.*"]
+            }
+          },
+          "httpResponse": {
+            "statusCode": 200,
+            "headers": {
+              "Content-Type": ["application/json"]
+            },
+            "body": {
+              "choices": [
+                {
+                  "message": {
+                    "content": "This is a mock response from OpenAI API",
+                    "role": "assistant"
+                  },
+                  "finish_reason": "stop"
+                }
+              ],
+              "created": "{{now}}",
+              "model": "gpt-4"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Gemini API Mock",
+      "expectations": [
+        {
+          "httpRequest": {
+            "method": "POST",
+            "path": "/v1/models/gemini-pro:generateContent",
+            "queryStringParameters": {
+              "key": [".*"]
+            }
+          },
+          "httpResponse": {
+            "statusCode": 200,
+            "headers": {
+              "Content-Type": ["application/json"]
+            },
+            "body": {
+              "candidates": [
+                {
+                  "content": {
+                    "parts": [
+                      {
+                        "text": "This is a mock response from Gemini API"
+                      }
+                    ]
+                  },
+                  "safetyRatings": []
+                }
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Market Data API Mock",
+      "expectations": [
+        {
+          "httpRequest": {
+            "method": "GET",
+            "path": "/api/v1/market/data/.*"
+          },
+          "httpResponse": {
+            "statusCode": 200,
+            "headers": {
+              "Content-Type": ["application/json"]
+            },
+            "body": {
+              "symbol": "AAPL",
+              "timestamp": "{{now}}",
+              "data": {
+                "price": 150.25,
+                "volume": 1000000,
+                "indicators": {
+                  "rsi": 65.5,
+                  "macd": {
+                    "value": 0.5,
+                    "signal": 0.3,
+                    "histogram": 0.2
+                  }
+                }
+              }
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Error Response Mocks",
+      "expectations": [
+        {
+          "httpRequest": {
+            "method": "POST",
+            "path": "/api/error/rate-limit"
+          },
+          "httpResponse": {
+            "statusCode": 429,
+            "headers": {
+              "Content-Type": ["application/json"]
+            },
+            "body": {
+              "error": "rate_limit_exceeded",
+              "message": "Too many requests"
+            }
+          }
+        },
+        {
+          "httpRequest": {
+            "method": "POST",
+            "path": "/api/error/server-error"
+          },
+          "httpResponse": {
+            "statusCode": 500,
+            "headers": {
+              "Content-Type": ["application/json"]
+            },
+            "body": {
+              "error": "internal_server_error",
+              "message": "Internal server error"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Authentication Mock",
+      "expectations": [
+        {
+          "httpRequest": {
+            "method": "POST",
+            "path": "/api/auth/verify"
+          },
+          "httpResponse": {
+            "statusCode": 200,
+            "headers": {
+              "Content-Type": ["application/json"]
+            },
+            "body": {
+              "valid": true,
+              "user_id": "test-user-123",
+              "scopes": ["read", "write"]
+            }
+          }
+        }
+      ]
+    }
+  ],
+  "mockServerResponseTemplates": [
+    {
+      "templateId": "now",
+      "template": "{% now 'yyyy-MM-dd''T''HH:mm:ss''Z' %}"
+    },
+    {
+      "templateId": "uuid",
+      "template": "{% uuid %}"
+    }
+  ],
+  "mockServerGlobalActions": [
+    {
+      "delay": {
+        "timeUnit": "MILLISECONDS",
+        "value": 100
+      }
+    }
+  ]
+}

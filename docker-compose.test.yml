@@ -1,0 +1,146 @@
+version: '3.8'
+
+services:
+  # PostgreSQL for test database
+  postgres_test:
+    image: postgres:15-alpine
+    container_name: chaetra_postgres_test
+    environment:
+      POSTGRES_DB: test_naetra_db
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_HOST_AUTH_METHOD: trust
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_test_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    command: 
+      - "postgres"
+      - "-c"
+      - "max_connections=100"
+      - "-c"
+      - "shared_buffers=256MB"
+
+  # Redis for test cache
+  redis_test:
+    image: redis:7-alpine
+    container_name: chaetra_redis_test
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_test_data:/data
+    command: redis-server --appendonly yes --maxmemory 256mb --maxmemory-policy allkeys-lru
+    healthcheck:
+      test: ["CMD-SHELL", "redis-cli ping | grep PONG"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  # Ollama for test LLM
+  ollama_test:
+    image: ollama/ollama:latest
+    container_name: chaetra_ollama_test
+    ports:
+      - "11434:11434"
+    volumes:
+      - ollama_test_data:/root/.ollama
+    deploy:
+      resources:
+        limits:
+          memory: 4G
+        reservations:
+          memory: 1G
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:11434/api/tags || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+
+  # Mock API server for external services
+  mockserver_test:
+    image: mockserver/mockserver:latest
+    container_name: chaetra_mockserver_test
+    ports:
+      - "1080:1080"
+    environment:
+      MOCKSERVER_INITIALIZATION_JSON_PATH: /config/initializerJson.json
+    volumes:
+      - ./tests/mocks:/config
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:1080/mockserver/status || exit 1"]
+      interval: 5s
+      timeout: 5s
+      retries: 3
+
+  # Test result viewer (optional, for viewing coverage reports)
+  coverage_viewer:
+    image: nginx:alpine
+    container_name: chaetra_coverage_viewer
+    ports:
+      - "8000:80"
+    volumes:
+      - ./test_results:/usr/share/nginx/html
+    profiles:
+      - coverage
+
+volumes:
+  postgres_test_data:
+    name: chaetra_postgres_test_data
+  redis_test_data:
+    name: chaetra_redis_test_data
+  ollama_test_data:
+    name: chaetra_ollama_test_data
+
+networks:
+  default:
+    name: chaetra_test_network
+
+# Environment configuration
+x-environment: &default-environment
+  TEST_MODE: "true"
+  TEST_DATABASE_URL: "postgresql+asyncpg://postgres:postgres@postgres_test:5432/test_naetra_db"
+  TEST_REDIS_URL: "redis://redis_test:6379/1"
+  TEST_OLLAMA_URL: "http://ollama_test:11434"
+  TEST_MOCK_SERVER_URL: "http://mockserver_test:1080"
+  PYTHONPATH: "/app"
+  PYTHONUNBUFFERED: "1"
+
+# Add test environment config
+configs:
+  test_config:
+    file: ./config/test.yml
+
+# Health check script
+x-healthcheck: &healthcheck
+  interval: 5s
+  timeout: 5s
+  retries: 3
+  start_period: 10s
+
+# Add test labels
+x-labels: &test-labels
+  environment: "test"
+  project: "chaetra"
+
+# Test service template
+x-test-service: &test-service
+  restart: "no"
+  networks:
+    - default
+  labels: *test-labels
+  environment: *default-environment
+  healthcheck: *healthcheck
+  depends_on:
+    postgres_test:
+      condition: service_healthy
+    redis_test:
+      condition: service_healthy
+    ollama_test:
+      condition: service_healthy
+    mockserver_test:
+      condition: service_healthy
