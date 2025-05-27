@@ -1,138 +1,103 @@
-"""Interfaces for CHAETRA components."""
-from abc import ABC, abstractmethod
-from typing import Optional, Dict, Any, List
+"""Core interfaces for CHAETRA components."""
+from typing import Dict, Any, List, Optional, Protocol
 from dataclasses import dataclass
 from datetime import datetime
-from uuid import UUID
+
+@dataclass
+class Intent:
+    primary_goal: str
+    sub_goals: List[str]
+    required_context: Dict[str, Any]
+    metadata: Optional[Dict[str, Any]] = None
+    response_type: Optional[str] = None
 
 @dataclass
 class MemoryItem:
-    """Data class for memory items."""
-    id: UUID
+    id: str
     content: Dict[str, Any]
-    source: str
+    relevance: float
     timestamp: datetime
-    memory_type: str = "short_term"  # "short_term" or "core"
-    confidence: float = 0.0
-    validation_count: int = 0
-    tags: List[str] = None
-    metadata: Dict[str, Any] = None
+    metadata: Optional[Dict[str, Any]] = None
 
 @dataclass
 class Pattern:
-    """Data class for recognized patterns."""
-    name: str
-    description: str
+    pattern_type: str
+    data: Dict[str, Any]
     confidence: float
-    occurrences: List[Dict[str, Any]]
-    validation_count: int = 0
-    last_observed: datetime = None
-    metadata: Dict[str, Any] = None
+    metadata: Optional[Dict[str, Any]] = None
+
+@dataclass
+class Evidence:
+    source: str
+    data: Any
+    confidence: float
+    timestamp: datetime
+    metadata: Optional[Dict[str, Any]] = None
 
 @dataclass
 class Opinion:
-    """Data class for formed opinions."""
-    id: UUID
-    topic: str
-    belief: str
+    subject: str
+    summary: str
     confidence: float
-    evidence: List[Dict[str, Any]]
-    formed_at: datetime
-    last_updated: datetime = None
-    validation_count: int = 0
-    metadata: Dict[str, Any] = None
+    evidence: List[Evidence]
+    metadata: Optional[Dict[str, Any]] = None
 
-class ILLMProvider(ABC):
-    """Interface for LLM providers."""
-    
-    @abstractmethod
-    def __init__(
-        self,
-        provider_name: str,
-        model_name: Optional[str],
-        api_key: Optional[str] = None,
-        base_url: Optional[str] = None
-    ):
-        pass
+class IMemorySystem(Protocol):
+    async def store_memory(self, item: Dict[str, Any]) -> str:
+        """Store a new memory item."""
+        ...
 
-    @abstractmethod
-    async def generate_text(
-        self, 
-        prompt: str, 
-        context: Optional[Dict[str, Any]] = None,
-        temperature: float = 0.7,
-        schema: Optional[Dict[str, Any]] = None
-    ) -> str:
-        """Generate text from the LLM."""
-        pass
-
-class IMemorySystem(ABC):
-    """Interface for memory system."""
-    
-    @abstractmethod
-    async def add_to_short_term(self, content: Dict[str, Any], source: str, tags: List[str] = None) -> MemoryItem:
-        """Add item to short-term memory."""
-        pass
-
-    @abstractmethod
-    async def move_to_core(self, memory_item: MemoryItem) -> bool:
-        """Move item from short-term to core memory."""
-        pass
-
-    @abstractmethod
     async def retrieve_memory(
         self, 
         query: Dict[str, Any],
-        memory_type: str = "all",
-        limit: int = 10
+        limit: Optional[int] = None
     ) -> List[MemoryItem]:
-        """Retrieve memories matching the query."""
-        pass
+        """Retrieve relevant memories based on query."""
+        ...
 
-class ILearningSystem(ABC):
-    """Interface for learning system."""
-    
-    @abstractmethod
-    async def identify_patterns(self, data: Dict[str, Any]) -> List[Pattern]:
-        """Identify patterns in the data."""
-        pass
+class ILearningSystem(Protocol):
+    async def learn_from_interaction(self, interaction_data: Dict[str, Any]) -> None:
+        """Learn from an interaction."""
+        ...
 
-    @abstractmethod
-    async def validate_pattern(self, pattern: Pattern, new_data: Dict[str, Any]) -> bool:
-        """Validate a pattern against new data."""
-        pass
+    async def get_learned_patterns(self) -> List[Pattern]:
+        """Get learned patterns."""
+        ...
 
-class IReasoningSystem(ABC):
-    """Interface for reasoning system."""
-    
-    @abstractmethod
-    async def analyze_data(
+class IReasoningSystem(Protocol):
+    async def analyze(
         self,
-        data: Dict[str, Any],
-        context: Dict[str, Any],
-        query_intent: Dict[str, Any]
+        query: str,
+        intent: Intent,
+        memories: List[MemoryItem],
+        available_tools: Optional[Dict[str, Any]] = None
     ) -> Dict[str, Any]:
-        """Analyze data and generate insights."""
-        pass
+        """Analyze a query with context."""
+        ...
 
-class IOpinionSystem(ABC):
-    """Interface for opinion system."""
-    
-    @abstractmethod
+class IOpinionSystem(Protocol):
     async def form_opinion(
         self,
-        topic: str,
-        analysis_result: Dict[str, Any],
-        context: Dict[str, Any]
-    ) -> Opinion:
-        """Form an opinion about a topic based on analysis."""
-        pass
+        subject: str,
+        reasoning_result: Dict[str, Any],
+        context: Optional[Dict[str, Any]] = None
+    ) -> Optional[Opinion]:
+        """Form an opinion based on analysis."""
+        ...
 
-    @abstractmethod
-    async def update_opinion(
+class ILLMProvider(Protocol):
+    async def generate_structured_output(
         self,
-        opinion_id: UUID,
-        new_evidence: List[Dict[str, Any]]
-    ) -> Opinion:
-        """Update an existing opinion with new evidence."""
-        pass
+        prompt: str,
+        schema: Dict[str, Any]
+    ) -> Dict[str, Any]:
+        """Generate structured output following a schema."""
+        ...
+
+    async def get_completion(
+        self,
+        prompt: str,
+        stop_sequences: Optional[List[str]] = None
+    ) -> str:
+        """Get a completion for a prompt."""
+        ...

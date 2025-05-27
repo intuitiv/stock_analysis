@@ -1,197 +1,202 @@
-"""Opinion system implementation for CHAETRA."""
-import uuid
-import json
-from typing import Dict, Any, List
+"""Opinion system for forming conclusions based on analysis."""
+from typing import Dict, Any, List, Optional
 from datetime import datetime
 
-from app.chaetra.interfaces import IOpinionSystem, Opinion
-from app.chaetra.memory import MemorySystem
-from app.chaetra.llm import LLMManager
+from app.chaetra.interfaces import (
+    IOpinionSystem,
+    Opinion,
+    Evidence
+)
+from app.chaetra.utils.event_system import get_event_system
+from app.schemas.chat_schemas import ProcessingEventType
 
 class OpinionSystem(IOpinionSystem):
-    """Implementation of the opinion system."""
-    
-    def __init__(self, memory_system: MemorySystem, llm_manager: LLMManager):
-        self.memory = memory_system
-        self.llm = llm_manager
-        self.min_confidence = 0.6
-
+    def __init__(self):
+        """Initialize opinion system."""
+        self.event_system = get_event_system()
+        
     async def form_opinion(
         self,
-        topic: str,
-        analysis_result: Dict[str, Any],
-        context: Dict[str, Any]
-    ) -> Opinion:
-        """Form an opinion about a topic based on analysis."""
+        subject: str,
+        reasoning_result: Dict[str, Any],
+        context: Optional[Dict[str, Any]] = None
+    ) -> Optional[Opinion]:
+        """Form an opinion based on analysis."""
+        session_id = context.get("session_id", 0) if context else 0
         
-        # Generate opinion using LLM
-        prompt = self._create_opinion_prompt(topic, analysis_result, context)
-        opinion_text = await self.llm.generate_text(
-            prompt=prompt,
-            context=context,
-            temperature=0.3
+        # 1. Extract evidence from reasoning
+        await self.event_system.emit(
+            session_id,
+            ProcessingEventType.THOUGHT,
+            "Evaluating evidence...",
+            {"reasoning_confidence": reasoning_result.get("confidence", 0.0)}
         )
-
-        # Calculate confidence based on analysis and evidence
-        confidence = self._calculate_confidence(analysis_result)
-
-        # Create opinion object
-        opinion = Opinion(
-            id=uuid.uuid4(),
-            topic=topic,
-            belief=opinion_text,
-            confidence=confidence,
-            evidence=[
-                {
-                    "type": "analysis_result",
-                    "content": analysis_result,
-                    "timestamp": datetime.utcnow().isoformat()
-                }
-            ],
-            formed_at=datetime.utcnow(),
-            last_updated=datetime.utcnow(),
-            validation_count=1,
-            metadata={
-                "context": context,
-                "source": "initial_analysis"
+        
+        evidence = self._extract_evidence(reasoning_result)
+        if not evidence:
+            await self.event_system.emit(
+                session_id,
+                ProcessingEventType.THOUGHT,
+                "Insufficient evidence to form opinion",
+                {"status": "no_evidence"}
+            )
+            return None
+            
+        # 2. Weigh evidence
+        evidence_weights = await self._weigh_evidence(evidence, context)
+        
+        # 3. Form summary
+        summary = await self._form_summary(
+            subject,
+            evidence,
+            evidence_weights,
+            reasoning_result
+        )
+        
+        # Calculate confidence
+        confidence = self._calculate_confidence(
+            evidence_weights,
+            reasoning_result.get("confidence", 0.0)
+        )
+        
+        await self.event_system.emit(
+            session_id,
+            ProcessingEventType.THOUGHT,
+            "Opinion formed",
+            {
+                "confidence": confidence,
+                "evidence_count": len(evidence)
             }
         )
-
-        # Store opinion in memory if confidence meets threshold
-        if confidence >= self.min_confidence:
-            try:
-                await self.memory.add_to_short_term(
-                    content={
-                        **opinion.__dict__,
-                        "id": str(opinion.id)  # Convert UUID to string for serialization
-                    },
-                    source="opinion_formation",
-                    tags=[topic, *context.get("current_symbols", [])]
-                )
-            except Exception as e:
-                print(f"Failed to store opinion in memory: {str(e)}")
-
-        return opinion
-
-    async def update_opinion(
-        self,
-        opinion_id: uuid.UUID,
-        new_evidence: List[Dict[str, Any]]
-    ) -> Opinion:
-        """Update an existing opinion with new evidence."""
         
-        # Retrieve existing opinion from memory
-        opinions = await self.memory.retrieve_memory(
-            query={"id": str(opinion_id)},
-            memory_type="all",
-            limit=1
+        # Return formed opinion
+        return Opinion(
+            subject=subject,
+            summary=summary,
+            confidence=confidence,
+            evidence=evidence,
+            metadata={
+                "timestamp": datetime.utcnow().isoformat(),
+                "evidence_weights": evidence_weights,
+                "context_type": context.get("analysis_type") if context else None
+            }
         )
         
-        if not opinions:
-            raise ValueError(f"Opinion {opinion_id} not found")
+    def _extract_evidence(self, reasoning_result: Dict[str, Any]) -> List[Evidence]:
+        """Extract evidence from reasoning results."""
+        evidence = []
         
-        # Convert memory item to Opinion object
-        memory_content = opinions[0].content
-        memory_content["id"] = uuid.UUID(memory_content["id"])  # Convert string back to UUID
-        current_opinion = Opinion(**memory_content)
-        
-        # Add new evidence
-        current_opinion.evidence.extend(new_evidence)
-        current_opinion.validation_count += 1
-        current_opinion.last_updated = datetime.utcnow()
-        
-        # Recalculate confidence
-        new_confidence = self._recalculate_confidence(
-            current_confidence=current_opinion.confidence,
-            validation_count=current_opinion.validation_count,
-            new_evidence=new_evidence
-        )
-        current_opinion.confidence = new_confidence
-
-        # Update in memory
-        try:
-            await self.memory.add_to_short_term(
-                content={
-                    **current_opinion.__dict__,
-                    "id": str(current_opinion.id)  # Convert UUID to string for serialization
-                },
-                source="opinion_update",
-                tags=[current_opinion.topic]
-            )
-
-            # If confidence and validation count are high enough, move to core memory
-            if (current_opinion.confidence >= 0.8 and 
-                current_opinion.validation_count >= 3):
-                await self.memory.move_to_core(opinions[0])
-        except Exception as e:
-            print(f"Failed to update opinion in memory: {str(e)}")
-
-        return current_opinion
-
-    def _create_opinion_prompt(
+        # Extract from reasoning path
+        if path := reasoning_result.get("path", []):
+            for step in path:
+                if "evidence" in step.lower():
+                    evidence.append(Evidence(
+                        source="reasoning_path",
+                        data={"step": step},
+                        confidence=reasoning_result.get("confidence", 0.5),
+                        timestamp=datetime.utcnow()
+                    ))
+                    
+        # Extract from patterns
+        if patterns := reasoning_result.get("patterns", []):
+            for pattern in patterns:
+                evidence.append(Evidence(
+                    source="pattern_analysis",
+                    data=pattern,
+                    confidence=pattern.get("confidence", 0.5),
+                    timestamp=datetime.utcnow()
+                ))
+                
+        # Extract from insights
+        if insights := reasoning_result.get("insights", []):
+            for insight in insights:
+                evidence.append(Evidence(
+                    source="insight_analysis",
+                    data={"insight": insight},
+                    confidence=reasoning_result.get("confidence", 0.5),
+                    timestamp=datetime.utcnow()
+                ))
+                
+        return evidence
+    
+    async def _weigh_evidence(
         self,
-        topic: str,
-        analysis_result: Dict[str, Any],
-        context: Dict[str, Any]
+        evidence: List[Evidence],
+        context: Optional[Dict[str, Any]]
+    ) -> Dict[str, float]:
+        """Weigh evidence based on source and context."""
+        weights = {}
+        
+        # Base weights for different sources
+        source_weights = {
+            "market_data": 0.8,
+            "technical_analysis": 0.7,
+            "fundamental_analysis": 0.7,
+            "sentiment_analysis": 0.5,
+            "pattern_analysis": 0.6,
+            "insight_analysis": 0.5,
+            "reasoning_path": 0.4
+        }
+        
+        # Adjust weights based on context
+        context_type = context.get("analysis_type") if context else None
+        
+        for e in evidence:
+            base_weight = source_weights.get(e.source, 0.5)
+            
+            # Boost weight if source matches context
+            if context_type and context_type in e.source:
+                base_weight *= 1.2
+                
+            # Factor in confidence
+            final_weight = base_weight * e.confidence
+            
+            weights[str(e.data)] = min(1.0, final_weight)
+            
+        return weights
+    
+    async def _form_summary(
+        self,
+        subject: str,
+        evidence: List[Evidence],
+        weights: Dict[str, float],
+        reasoning_result: Dict[str, Any]
     ) -> str:
-        """Create prompt for opinion formation."""
-        return f"""
-        Based on the following analysis of {topic}, form a clear opinion:
+        """Form a summary opinion based on weighted evidence."""
+        # Get overall sentiment
+        sentiment_score = sum(
+            weights.get(str(e.data), 0.5) * e.confidence
+            for e in evidence
+        ) / len(evidence) if evidence else 0.5
         
-        Analysis Results:
-        {analysis_result.get('analysis_summary', '')}
-        
-        Market Context:
-        {json.dumps(context, indent=2)}
-        
-        Consider:
-        1. Strength of evidence in the analysis
-        2. Market conditions and context
-        3. Historical patterns and precedents
-        4. Risk factors and uncertainties
-        
-        Provide a clear, well-reasoned opinion about {topic} that includes:
-        1. Main belief/conclusion
-        2. Key supporting evidence
-        3. Potential counter-arguments
-        4. Level of conviction
-        """
-
-    def _calculate_confidence(self, analysis_result: Dict[str, Any]) -> float:
-        """Calculate initial confidence based on analysis results."""
-        # Start with base confidence
-        confidence = 0.5
-
-        # Adjust based on analysis factors
-        if "confidence" in analysis_result:
-            confidence = analysis_result["confidence"]
-        
-        # Adjust based on data quality
-        if analysis_result.get("data_quality_score"):
-            confidence *= analysis_result["data_quality_score"]
-
-        # Cap confidence
-        return min(max(confidence, 0.0), 1.0)
-
-    def _recalculate_confidence(
+        # Form summary based on mock templates
+        if sentiment_score > 0.7:
+            return (
+                f"Strong positive indicators for {subject}. "
+                "Evidence suggests favorable conditions with high confidence."
+            )
+        elif sentiment_score > 0.5:
+            return (
+                f"Moderately positive outlook for {subject}. "
+                "Some supporting evidence, but continue monitoring."
+            )
+        else:
+            return (
+                f"Neutral stance on {subject}. "
+                "Insufficient evidence for strong recommendation."
+            )
+            
+    def _calculate_confidence(
         self,
-        current_confidence: float,
-        validation_count: int,
-        new_evidence: List[Dict[str, Any]]
+        evidence_weights: Dict[str, float],
+        reasoning_confidence: float
     ) -> float:
-        """Recalculate confidence based on new evidence."""
-        # Start with current confidence
-        confidence = current_confidence
-
-        # Adjust based on validation history
-        confidence *= (1.0 + (validation_count - 1) * 0.1)  # Increase with validations
-
-        # Adjust based on new evidence
-        for evidence in new_evidence:
-            if evidence.get("matches_belief", False):
-                confidence *= 1.1  # Increase confidence for supporting evidence
-            else:
-                confidence *= 0.9  # Decrease confidence for contradicting evidence
-
-        # Cap confidence
-        return min(max(confidence, 0.0), 1.0)
+        """Calculate overall confidence in the opinion."""
+        if not evidence_weights:
+            return 0.0
+            
+        # Average evidence weights
+        evidence_confidence = sum(evidence_weights.values()) / len(evidence_weights)
+        
+        # Combine with reasoning confidence
+        return min(1.0, (evidence_confidence + reasoning_confidence) / 2)

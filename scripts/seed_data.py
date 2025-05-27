@@ -18,15 +18,19 @@ sys.path.append(str(project_root))
 load_dotenv(project_root / ".env")
 
 # Set defaults for required environment variables if not set by .env or shell
-os.environ.setdefault("DATABASE_URL", "sqlite:///./naetra.db")
-os.environ.setdefault("ASYNC_DATABASE_URL", "sqlite+aiosqlite:///./naetra.db")
+os.environ.setdefault("DATABASE_URL", "postgresql://postgres:postgres@localhost:5432/stockanalysis_dev")
+os.environ.setdefault("ASYNC_DATABASE_URL", "postgresql+asyncpg://postgres:postgres@localhost:5432/stockanalysis_dev")
 os.environ.setdefault("SECRET_KEY", "your-super-secret-key-here-at-least-32-chars")
 
 from sqlalchemy import select
 from app.core.database import async_session_maker, async_engine, Base
 from app.core.config import get_settings
 from app.core.security import get_password_hash
-from app.models import User, Stock  # Only import what we need
+from app.models import (
+    User, Stock, Portfolio, Position, Transaction, TransactionType,
+    Analysis, AnalysisType, AnalysisStatus, AnalysisInput, AnalysisResult, AnalysisRun,
+    ChatSession, ChatMessage, MessageRole
+)
 
 # ANSI color codes
 BLUE = "\033[94m"     # Info
@@ -46,13 +50,61 @@ def error(msg: str) -> None:
     """Print error message in red"""
     print(f"{RED}[ERROR] {msg}{RESET}")
 
+async def create_database():
+    """Create the database if it doesn't exist."""
+    try:
+        import asyncpg
+        # Connect to default postgres database to create new database
+        conn = await asyncpg.connect(
+            user='postgres',
+            password='postgres',
+            host='localhost',
+            port='5432',
+            database='postgres'
+        )
+
+        # Check if database exists
+        result = await conn.fetchrow(
+            "SELECT 1 FROM pg_database WHERE datname=$1",
+            'stockanalysis_dev'
+        )
+        
+        if result is None:
+            # Close other connections to the template database
+            await conn.execute("""
+                SELECT pg_terminate_backend(pg_stat_activity.pid)
+                FROM pg_stat_activity
+                WHERE pg_stat_activity.datname = 'stockanalysis_dev'
+                AND pid <> pg_backend_pid()
+            """)
+            # Create database
+            await conn.execute("CREATE DATABASE stockanalysis_dev")
+            info("Database 'stockanalysis_dev' created successfully.")
+        else:
+            debug("Database 'stockanalysis_dev' already exists.")
+        
+        await conn.close()
+    except Exception as e:
+        error(f"Error creating database: {str(e)}")
+        raise
+
 async def seed_data():
     """Populate database with initial data"""
     settings = get_settings() # Now settings will be loaded correctly
     
-    debug("Initializing database schema...")
+    # Create database if it doesn't exist
+    debug("Checking database...")
+    await create_database()
+    
+    debug("Dropping all tables...")
     try:
-        # Create tables if they don't exist
+        # Drop all tables first
+        async with async_engine.begin() as conn:
+            await conn.run_sync(Base.metadata.drop_all)
+        info("All tables dropped successfully.")
+        
+        debug("Creating new tables...")
+        # Create tables fresh
         async with async_engine.begin() as conn:
             await conn.run_sync(Base.metadata.create_all)
         info("Database schema initialized successfully.")
@@ -141,6 +193,118 @@ async def seed_data():
                 else:
                     debug(f"Stock {stock_info.symbol} already exists. Skipping.")
 
+            # Create default portfolio for admin
+            debug("Creating default portfolio for admin...")
+            default_portfolio = Portfolio(
+                user_id=admin.id,
+                name="Default Portfolio",
+                description="Default portfolio created during setup",
+                currency="USD"
+            )
+            db.add(default_portfolio)
+            await db.flush()
+            
+            # Create sample analysis
+            debug("Creating sample analysis...")
+            sample_analysis = Analysis(
+                name="Daily AAPL Technical Analysis",
+                description="Daily technical analysis of Apple stock",
+                analysis_type=AnalysisType.TECHNICAL,
+                user_id=admin.id,
+                is_active=True,
+                configuration={"indicators": ["SMA", "RSI", "MACD"]}
+            )
+            db.add(sample_analysis)
+            await db.flush()
+
+            # Create sample analysis run
+            analysis_run = AnalysisRun(
+                analysis_id=sample_analysis.id,
+                status=AnalysisStatus.COMPLETED,
+                execution_metadata={"execution_time": "2.5s"}
+            )
+            db.add(analysis_run)
+            await db.flush()
+
+            # Create sample analysis result
+            analysis_result = AnalysisResult(
+                analysis_run_id=analysis_run.id,
+                result_type="technical_indicators",
+                result_data={
+                    "sma": 150.25,
+                    "rsi": 65.5,
+                    "macd": {"line": 2.5, "signal": 1.8, "histogram": 0.7}
+                },
+                confidence_score=0.85
+            )
+            db.add(analysis_result)
+
+            # Create sample analysis input
+            analysis_input = AnalysisInput(
+                analysis_id=sample_analysis.id,
+                parameter_name="period",
+                parameter_value={"days": 14},
+                parameter_type="integer"
+            )
+            db.add(analysis_input)
+
+            # Create sample position for AAPL
+            aapl_stock = await db.execute(select(Stock).where(Stock.symbol == "AAPL"))
+            aapl_stock = aapl_stock.scalar_one()
+            
+            position = Position(
+                portfolio_id=default_portfolio.id,
+                stock_id=aapl_stock.id,
+                quantity=100,
+                average_price=150.0
+            )
+            db.add(position)
+            await db.flush()
+
+            # Create sample transaction
+            transaction = Transaction(
+                portfolio_id=default_portfolio.id,
+                position_id=position.id,
+                stock_id=aapl_stock.id,
+                transaction_type=TransactionType.BUY,
+                quantity=100,
+                price=150.0,
+                fees=7.99,
+                notes="Initial purchase of AAPL stock"
+            )
+            db.add(transaction)
+
+            # Create sample chat session
+            chat_session = ChatSession(
+                user_id=admin.id,
+                title="Stock Analysis Discussion",
+                context={"analysis_id": sample_analysis.id},
+                is_active=True,
+                session_metadata={"source": "web"}
+            )
+            db.add(chat_session)
+            await db.flush()
+
+            # Create sample chat messages
+            messages = [
+                ChatMessage(
+                    session_id=chat_session.id,
+                    role=MessageRole.USER,
+                    content="Can you analyze AAPL's performance?",
+                    message_metadata={"timestamp": "2025-05-23T12:00:00Z"}
+                ),
+                ChatMessage(
+                    session_id=chat_session.id,
+                    role=MessageRole.ASSISTANT,
+                    content="Based on the technical analysis, AAPL shows a bullish trend with RSI at 65.5.",
+                    message_metadata={"timestamp": "2025-05-23T12:00:01Z"},
+                    analysis_id=sample_analysis.id,
+                    analysis_result_id=analysis_result.id
+                )
+            ]
+            for message in messages:
+                db.add(message)
+
             debug("Committing changes...")
             await db.commit()
             info("Data seeding completed successfully!")
@@ -152,6 +316,8 @@ async def seed_data():
 
 if __name__ == "__main__":
     try:
+        # Import create_engine here to avoid circular imports
+        from sqlalchemy import create_engine
         # Add breakpoint here to debug initialization
         asyncio.run(seed_data())
     except KeyboardInterrupt:

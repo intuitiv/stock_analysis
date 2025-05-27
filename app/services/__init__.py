@@ -1,53 +1,48 @@
 """
 NAETRA Services Package
 
-This package provides various services for:
-- Market Data (data collection from various providers)
-- Analysis (technical and fundamental analysis)
-- ML (machine learning predictions and pattern recognition)
-- Portfolio Management
-- User Management
+Service layer components for business logic implementation.
+Uses lazy imports to avoid circular dependencies.
 """
+from typing import TYPE_CHECKING
 
-from .market_data_service import MarketDataService
-from .analysis_service import AnalysisService
-from .portfolio_service import PortfolioService
-from .user_service import UserService
-from .chat_service import ChatService
+# Import only what's needed for type hints
+if TYPE_CHECKING:
+    from .user_service import UserService
+    from .analysis_service import AnalysisService
+    from .portfolio_service import PortfolioService
+    from .market_data_service import MarketDataService
+    from .chat_service import ChatService
 
-# Analysis sub-package exports
-from .analysis.technical import TechnicalAnalyzer
-from .analysis.fundamental import FundamentalAnalyzer
-from .analysis.sentiment import SentimentAnalyzer
+def get_user_service():
+    """Get UserService instance (lazy import)"""
+    from .user_service import UserService
+    return UserService
 
-# Market data sub-package exports
-from .market_data.alpha_vantage import AlphaVantageProvider
-from .market_data.yahoo_finance import YahooFinanceProvider
-from .market_data.sec_edgar import SECEdgarProvider
+def get_analysis_service():
+    """Get AnalysisService instance (lazy import)"""
+    from .analysis_service import AnalysisService
+    return AnalysisService
 
-# ML sub-package exports
-# from .ml.prediction import PredictionModel # PredictionModel class does not exist in prediction.py
-# from .ml.pattern_recognition import PatternRecognizer # PatternRecognizer class does not exist in pattern_recognition.py
+def get_portfolio_service():
+    """Get PortfolioService instance (lazy import)"""
+    from .portfolio_service import PortfolioService
+    return PortfolioService
+
+def get_market_data_service():
+    """Get MarketDataService instance (lazy import)"""
+    from .market_data_service import MarketDataService
+    return MarketDataService
+
+def get_chat_service():
+    """Get ChatService instance (lazy import)"""
+    from .chat_service import ChatService
+    return ChatService
 
 __all__ = [
-    # Main services
-    'MarketDataService',
-    'AnalysisService',
-    'PortfolioService',
-    'UserService',
-    'ChatService',
-    
-    # Analysis
-    'TechnicalAnalyzer',
-    'FundamentalAnalyzer',
-    'SentimentAnalyzer',
-    
-    # Market Data Providers
-    'AlphaVantageProvider',
-    'YahooFinanceProvider',
-    'SECEdgarProvider',
-    
-    # ML Components
-    # 'PredictionModel', # Corresponding import is commented out
-    # 'PatternRecognizer', # Corresponding import is commented out
+    'get_user_service',
+    'get_analysis_service',
+    'get_portfolio_service',
+    'get_market_data_service',
+    'get_chat_service',
 ]

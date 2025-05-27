@@ -27,10 +27,22 @@ export interface ChatMessageResponseData {
   };
 }
 
-export interface StreamEvent {
-  event: 'stream_chunk' | 'stream_end' | 'processing_update' | 'processing' | 'intent' | 'analysis' | 'error' | 'data_fetch' | 'final';
-  data: any;
-  timestamp?: string;
+export enum ProcessingEventType {
+  INFO = 'info',
+  ERROR = 'error',
+  PROCESSING = 'processing',
+  INTENT = 'intent',
+  ANALYSIS = 'analysis',
+  THOUGHT = 'thought',
+  LEARNING = 'learning',
+  DATA_FETCH = 'data_fetch',
+  FINAL = 'final',
+  PING = 'ping',
+  PONG = 'pong',
+  CLOSE = 'close',
+  STREAM_CHUNK = 'stream_chunk',
+  STREAM_END = 'stream_end',
+  PROCESSING_UPDATE = 'processing_update'
 }
 
 export interface MarketIndices {
@@ -39,6 +51,13 @@ export interface MarketIndices {
   price: number;
   change: number;
   changePercent: number;
+}
+
+export interface StreamEvent {
+  event: ProcessingEventType;
+  data: string | object;
+  timestamp: string;
+  metadata?: any;
 }
 
 export interface StockSummary {
@@ -82,15 +101,10 @@ export interface AuthResponse {
 const auth = {
   login: async (credentials: { username: string; password: string }) => {
     try {
-      const params = new URLSearchParams();
-      params.append('username', credentials.username);
-      params.append('password', credentials.password);
-      params.append('grant_type', 'password');
-      
-      const response = await apiClient.post('/api/v1/auth/login', params.toString(), {
-        headers: {
-          'Content-Type': 'application/x-www-form-urlencoded',
-        }
+      const response = await apiClient.post('/api/v1/auth/login', {
+        username: credentials.username,
+        password: credentials.password,
+        grant_type: 'password'
       });
       
       const authResponse: AuthResponse = response.data;

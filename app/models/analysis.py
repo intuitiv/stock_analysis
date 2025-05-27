@@ -99,9 +99,10 @@ class Analysis(Base, TimestampMixin, UUIDMixin):
     configuration = Column(JSON)  # Additional configuration options
 
     # Relationships
-    user = relationship("User", backref="analyses")
+    user = relationship("User", back_populates="analyses")
     inputs = relationship("AnalysisInput", back_populates="analysis", cascade="all, delete-orphan")
     runs = relationship("AnalysisRun", back_populates="analysis", cascade="all, delete-orphan")
+    outputs = relationship("AnalysisOutput", back_populates="analysis", cascade="all, delete-orphan")
 
     def __repr__(self):
         return f"<Analysis(id={self.id}, name='{self.name}', type='{self.analysis_type}')>"

@@ -1,3 +1,4 @@
+"""Alpha Vantage market data provider implementation."""
 import aiohttp
 from typing import Dict, List, Any, Optional
 from datetime import datetime, timedelta
@@ -13,15 +14,19 @@ logger = logging.getLogger(__name__)
 
 class AlphaVantageProvider(MarketDataProvider):
     def __init__(self, cache: Optional[RedisCache] = None):
-        self.api_key = str(settings.ALPHA_VANTAGE_API_KEY.get_secret_value()) if settings.ALPHA_VANTAGE_API_KEY else None
+        # Access the API key directly - settings.ALPHA_VANTAGE_API_KEY will return SecretStr
+        # Use .get_secret_value() when API key exists, otherwise None
+        self.api_key = str(settings.ALPHA_VANTAGE_API_KEY) if settings.ALPHA_VANTAGE_API_KEY else None
         if not self.api_key:
             logger.warning("Alpha Vantage API key not configured. Provider will not function.")
         self.base_url = "https://www.alphavantage.co/query"
         self.cache = cache if cache else RedisCache()
-        self.cache_ttl_seconds = settings.MARKET_DATA_CACHE_TTL_SECONDS # e.g., 300
+        self.cache_ttl_seconds = getattr(settings, 'MARKET_DATA_CACHE_TTL_SECONDS', 300)  # Default 5 minutes
+
+    # ... [rest of the file remains unchanged]
 
     async def _fetch_with_cache(self, cache_key: str, fetch_func, *args, **kwargs) -> Any:
-        if not self.api_key: return kwargs.get("default_return", None) # Don't attempt if no API key
+        if not self.api_key: return kwargs.get("default_return", None)  # Don't attempt if no API key
 
         try:
             cached_data = await self.cache.get(cache_key)
@@ -30,10 +35,10 @@ class AlphaVantageProvider(MarketDataProvider):
                 return cached_data
         except Exception as e:
             logger.error(f"Redis cache GET error for AV:{cache_key}: {e}")
-        
+
         logger.debug(f"Cache miss for AV:{cache_key}. Fetching from source.")
         data = await fetch_func(*args, **kwargs)
-        
+
         if data is not None:
             try:
                 # Ensure all datetime objects in data are serialized before caching
@@ -58,11 +63,11 @@ class AlphaVantageProvider(MarketDataProvider):
         # Create a new params dict to avoid modifying the original
         request_params = params.copy()
         request_params["apikey"] = self.api_key
-        
+
         # Log the full request details
         request_url = f"{self.base_url}?{'&'.join(f'{k}={v}' for k, v in request_params.items() if k != 'apikey')}"
         logger.info(f"Making Alpha Vantage request: {request_url} (API key hidden)")
-        
+
         async with aiohttp.ClientSession() as session:
             try:
                 async with session.get(self.base_url, params=request_params) as response:
@@ -70,7 +75,7 @@ class AlphaVantageProvider(MarketDataProvider):
                         data = await response.json()
                         # Log the response structure
                         logger.info(f"Alpha Vantage response keys: {data.keys()}")
-                        
+
                         if "Error Message" in data:
                             logger.error(f"Alpha Vantage API Error: {data['Error Message']} for request: {params.get('function')} - {params.get('symbol')}")
                             return None
@@ -94,11 +99,11 @@ class AlphaVantageProvider(MarketDataProvider):
                 return None
 
     async def get_price_data(
-        self,
-        symbol: str,
-        start_date: datetime,
-        end_date: datetime,
-        interval: str = "1d"
+            self,
+            symbol: str,
+            start_date: datetime,
+            end_date: datetime,
+            interval: str = "1d"
     ) -> List[Dict[str, Any]]:
         av_interval_map = {
             "1d": ("TIME_SERIES_DAILY_ADJUSTED", "Time Series (Daily)"),
@@ -106,7 +111,7 @@ class AlphaVantageProvider(MarketDataProvider):
             "1mo": ("TIME_SERIES_MONTHLY_ADJUSTED", "Monthly Adjusted Time Series"),
             # Intraday intervals: '1min', '5min', '15min', '30min', '60min'
         }
-        
+
         av_function: Optional[str] = None
         av_series_key: Optional[str] = None
         av_interval_param: Optional[str] = None
@@ -122,12 +127,12 @@ class AlphaVantageProvider(MarketDataProvider):
             return []
 
         cache_key = f"av:price:{symbol}:{start_date.strftime('%Y%m%d')}:{end_date.strftime('%Y%m%d')}:{interval}"
-        
+
         async def fetch_av_prices_sync():
             params = {"function": av_function, "symbol": symbol, "outputsize": "full"}
             if av_interval_param:
                 params["interval"] = av_interval_param
-            
+
             raw_data = await self._make_request(params)
             if not raw_data or not av_series_key or av_series_key not in raw_data:
                 return []
@@ -141,7 +146,7 @@ class AlphaVantageProvider(MarketDataProvider):
                     dt_obj = datetime.strptime(date_str, date_format)
                     # AlphaVantage data is typically end-of-day for daily, ensure timezone consistency if needed
                     if dt_obj.tzinfo is None:
-                         dt_obj = dt_obj.replace(tzinfo=datetime.now().astimezone().tzinfo) # Assume local if naive, or UTC
+                        dt_obj = dt_obj.replace(tzinfo=datetime.now().astimezone().tzinfo)  # Assume local if naive, or UTC
 
                     if start_date <= dt_obj <= end_date:
                         processed_data.append({
@@ -177,11 +182,11 @@ class AlphaVantageProvider(MarketDataProvider):
             etf_map = {
                 "^GSPC": "SPY",  # S&P 500 ETF
                 "^IXIC": "QQQ",  # Nasdaq 100 ETF
-                "^DJI": "DIA",   # Dow Jones ETF
+                "^DJI": "DIA",  # Dow Jones ETF
                 # Add other common indices if needed
             }
-            api_symbol = etf_map.get(symbol, symbol) # Use mapped symbol if available, else original
-            
+            api_symbol = etf_map.get(symbol, symbol)  # Use mapped symbol if available, else original
+
             logger.info(f"Alpha Vantage: Fetching GLOBAL_QUOTE for original symbol '{symbol}' using API symbol '{api_symbol}'")
             params = {"function": "GLOBAL_QUOTE", "symbol": api_symbol}
             data = await self._make_request(params)
@@ -189,9 +194,9 @@ class AlphaVantageProvider(MarketDataProvider):
             if not data or "Global Quote" not in data or not data["Global Quote"]:
                 logger.warning(f"Alpha Vantage: No 'Global Quote' data for API symbol '{api_symbol}' (original: '{symbol}'). Response: {data}")
                 return None
-            
+
             quote_data = data["Global Quote"]
-            if not quote_data: # Check if the "Global Quote" object itself is empty
+            if not quote_data:  # Check if the "Global Quote" object itself is empty
                 logger.warning(f"Alpha Vantage: Empty 'Global Quote' object for API symbol '{api_symbol}' (original: '{symbol}').")
                 return None
             try:
@@ -199,14 +204,14 @@ class AlphaVantageProvider(MarketDataProvider):
                 prev_close = float(quote.get("08. previous close", 0))
                 change = float(quote.get("09. change", 0))
                 change_percent = float(quote.get("10. change percent", "0").rstrip('%'))
-                
-                latest_trading_day_str = quote.get("07. latest trading day")
-                timestamp = datetime.strptime(latest_trading_day_str, '%Y-%m-%d').replace(tzinfo=datetime.now().astimezone().tzinfo) if latest_trading_day_str else datetime.now().astimezone()
 
+                latest_trading_day_str = quote.get("07. latest trading day")
+                timestamp = datetime.strptime(latest_trading_day_str, '%Y-%m-%d').replace(
+                    tzinfo=datetime.now().astimezone().tzinfo) if latest_trading_day_str else datetime.now().astimezone()
 
                 result = {
-                    "symbol": symbol, # Return with the original queried symbol
-                    "name": index_map.get(symbol, quote_data.get("01. symbol")), # Use mapped name for indices or AV name
+                    "symbol": symbol,  # Return with the original queried symbol
+                    "name": index_map.get(symbol, quote_data.get("01. symbol")),  # Use mapped name for indices or AV name
                     "price": price,
                     "change": change,
                     "change_percent": change_percent,
@@ -216,15 +221,15 @@ class AlphaVantageProvider(MarketDataProvider):
                     "previous_close": prev_close,
                     "timestamp": timestamp.isoformat()
                 }
-                
+
                 if result["symbol"] in index_map:
                     result["name"] = index_map[result["symbol"]]  # Add index name if it's an index
-                
+
                 return result
             except (ValueError, TypeError, KeyError) as e:
-                logger.error(f"Error parsing Alpha Vantage quote for {symbol}: {e}. Data: {quote_data}") # Ensure this uses quote_data
+                logger.error(f"Error parsing Alpha Vantage quote for {symbol}: {e}. Data: {quote_data}")  # Ensure this uses quote_data
                 return None
-        
+
         data = await self._fetch_with_cache(cache_key, fetch_av_quote_sync)
         return data
 
@@ -234,24 +239,24 @@ class AlphaVantageProvider(MarketDataProvider):
         async def fetch_av_profile_sync():
             params = {"function": "OVERVIEW", "symbol": symbol}
             data = await self._make_request(params)
-            if not data or data.get("Symbol") is None : # Check if symbol is in response, indicates valid data
+            if not data or data.get("Symbol") is None:  # Check if symbol is in response, indicates valid data
                 return None
-            
+
             return {
                 "symbol": data.get("Symbol"),
                 "name": data.get("Name"),
                 "sector": data.get("Sector"),
                 "industry": data.get("Industry"),
                 "description": data.get("Description"),
-                "website": data.get("WebsitURL"), # Note: AV key might be WebsiteURL or similar
-                "logo_url": None, # Alpha Vantage OVERVIEW doesn't typically provide logo
+                "website": data.get("WebsitURL"),  # Note: AV key might be WebsiteURL or similar
+                "logo_url": None,  # Alpha Vantage OVERVIEW doesn't typically provide logo
                 "country": data.get("Country"),
                 "exchange": data.get("Exchange"),
                 "currency": data.get("Currency"),
                 "market_cap": int(data.get("MarketCapitalization", 0)) if data.get("MarketCapitalization") != "None" else None,
-                "full_time_employees": int(data.get("FullTimeEmployees",0)) if data.get("FullTimeEmployees") and data.get("FullTimeEmployees") != "None" else None,
+                "full_time_employees": int(data.get("FullTimeEmployees", 0)) if data.get("FullTimeEmployees") and data.get("FullTimeEmployees") != "None" else None,
             }
-        
+
         data = await self._fetch_with_cache(cache_key, fetch_av_profile_sync)
         return data
 
@@ -263,16 +268,16 @@ class AlphaVantageProvider(MarketDataProvider):
         }
         if statement_type not in statement_map:
             return []
-        
+
         av_function = statement_map[statement_type]
         cache_key = f"av:financials:{symbol}:{av_function}:{period}:{limit}"
 
         async def fetch_av_financials_sync():
             params = {"function": av_function, "symbol": symbol}
             raw_data = await self._make_request(params)
-            
+
             if not raw_data: return []
-            
+
             report_key = f"{period}Reports" if period == "annual" else "quarterlyReports"
             if report_key not in raw_data or not raw_data[report_key]:
                 return []
@@ -290,7 +295,7 @@ class AlphaVantageProvider(MarketDataProvider):
                             try:
                                 processed_report[key] = float(value) if '.' in value else int(value)
                             except ValueError:
-                                processed_report[key] = value # Keep as string if not numeric
+                                processed_report[key] = value  # Keep as string if not numeric
                     else:
                         processed_report[key] = value
                 processed_reports.append(processed_report)
@@ -299,13 +304,12 @@ class AlphaVantageProvider(MarketDataProvider):
         data = await self._fetch_with_cache(cache_key, fetch_av_financials_sync, default_return=[])
         return data if data else []
 
-
     async def get_key_financial_ratios(self, symbol: str) -> Optional[Dict[str, Any]]:
         # Alpha Vantage OVERVIEW endpoint contains many ratios
-        profile_data = await self.get_company_profile(symbol) # Leverages caching
+        profile_data = await self.get_company_profile(symbol)  # Leverages caching
         if not profile_data:
             return None
-        
+
         # Extract ratios from profile data (which is from OVERVIEW endpoint)
         return {
             "pe_ratio": float(profile_data.get("PERatio", 0)) if profile_data.get("PERatio") not in [None, "None"] else None,
@@ -327,38 +331,38 @@ class AlphaVantageProvider(MarketDataProvider):
         }
 
     async def get_market_news(
-        self,
-        symbols: Optional[List[str]] = None,
-        topics: Optional[List[str]] = None,
-        limit: int = 20
+            self,
+            symbols: Optional[List[str]] = None,
+            topics: Optional[List[str]] = None,
+            limit: int = 20
     ) -> List[Dict[str, Any]]:
-        params: Dict[str, Any] = {"function": "NEWS_SENTIMENT", "limit": str(min(limit, 1000))} # AV max limit is 1000
+        params: Dict[str, Any] = {"function": "NEWS_SENTIMENT", "limit": str(min(limit, 1000))}  # AV max limit is 1000
         if symbols:
             params["tickers"] = ",".join(symbols)
         if topics:
             params["topics"] = ",".join(topics)
-        
+
         # If no symbols or topics, AV might require one. Default to broad market topics.
         if not symbols and not topics:
-            params["topics"] = "technology,financial_markets,economy_fiscal" # Example broad topics
+            params["topics"] = "technology,financial_markets,economy_fiscal"  # Example broad topics
 
-        cache_key = f"av:news:{params.get('tickers','general')}:{params.get('topics','all')}:{limit}"
+        cache_key = f"av:news:{params.get('tickers', 'general')}:{params.get('topics', 'all')}:{limit}"
 
         async def fetch_av_news_sync():
             data = await self._make_request(params)
             if not data or "feed" not in data:
                 return []
-            
+
             news_items = []
-            for item in data["feed"]: # AV already limits by 'limit' param in request
+            for item in data["feed"]:  # AV already limits by 'limit' param in request
                 published_dt = None
-                time_str = item.get("time_published") # Format: "20231026T153000"
+                time_str = item.get("time_published")  # Format: "20231026T153000"
                 if time_str:
                     try:
                         published_dt = datetime.strptime(time_str, "%Y%m%dT%H%M%S").replace(tzinfo=datetime.now().astimezone().tzinfo)
                     except ValueError:
                         logger.warning(f"Could not parse news time_published: {time_str}")
-                
+
                 mentioned_symbols = [ticker_sentiment['ticker'] for ticker_sentiment in item.get('ticker_sentiment', [])]
 
                 news_items.append({
@@ -385,7 +389,7 @@ class AlphaVantageProvider(MarketDataProvider):
             data = await self._make_request(params)
             if not data or "bestMatches" not in data:
                 return []
-            
+
             results = []
             for match in data["bestMatches"][:limit]:
                 results.append({
@@ -393,10 +397,10 @@ class AlphaVantageProvider(MarketDataProvider):
                     "name": match.get("2. name"),
                     "type": match.get("3. type"),
                     "region": match.get("4. region"),
-                    "exchange": match.get("7. exchange", match.get("marketOpen") + "-" + match.get("marketClose")), # Exchange not always directly available
+                    "exchange": match.get("7. exchange", match.get("marketOpen") + "-" + match.get("marketClose")),  # Exchange not always directly available
                     "currency": match.get("8. currency"),
                 })
             return results
-            
+
         data = await self._fetch_with_cache(cache_key, fetch_av_search_sync, default_return=[])
         return data if data else []

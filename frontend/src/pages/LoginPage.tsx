@@ -12,9 +12,21 @@ const LoginPage: React.FC = () => {
   const handleSubmit = async (event: FormEvent) => {
     event.preventDefault();
     setError(null);
+
+    // Validate input lengths
+    if (username.length < 3 || username.length > 50) {
+      setError('Username must be between 3 and 50 characters');
+      return;
+    }
+
+    if (password.length < 8 || password.length > 100) {
+      setError('Password must be between 8 and 100 characters');
+      return;
+    }
+
     try {
       await login(username, password);
-      navigate('/dashboard'); // Redirect to dashboard on successful login
+      navigate('/chat'); // Redirect to chat on successful login
     } catch (err: any) {
       let errorMessage = 'Failed to login. Please check your credentials.';
       
@@ -41,6 +53,8 @@ const LoginPage: React.FC = () => {
           value={username}
           onChange={(e) => setUsername(e.target.value)}
           required
+          minLength={3}
+          maxLength={50}
           style={{ marginBottom: '10px', padding: '8px', borderRadius: '4px', border: '1px solid #ddd' }}
         />
         <label htmlFor="password">Password</label>
@@ -50,6 +64,8 @@ const LoginPage: React.FC = () => {
           value={password}
           onChange={(e) => setPassword(e.target.value)}
           required
+          minLength={8}
+          maxLength={100}
           style={{ marginBottom: '20px', padding: '8px', borderRadius: '4px', border: '1px solid #ddd' }}
         />
         <button type="submit" style={{ padding: '10px', borderRadius: '4px', border: 'none', backgroundColor: '#007bff', color: 'white', cursor: 'pointer' }}>

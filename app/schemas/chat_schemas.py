@@ -1,136 +1,176 @@
-"""
-Pydantic schemas for chat functionality.
-"""
-
-from typing import Optional, List, Dict, Any
-from pydantic import BaseModel, Field
+"""Chat-related schema definitions."""
 from datetime import datetime
 from enum import Enum
+from typing import Optional, Dict, Any, List, Union, Type
+from pydantic import BaseModel, Field
 
-class MessageRole(str, Enum):
-    """Role of the message sender."""
-    USER = "user"
-    ASSISTANT = "assistant"
-    SYSTEM = "system" # For system-generated messages or initial prompts
+class ProcessingEventType(str, Enum):
+    """Types of processing events."""
+    INTENT = "intent"
+    PROCESSING = "processing"
+    ANALYSIS = "analysis"
+    THOUGHT = "thought"
+    LEARNING = "learning"
+    ERROR = "error"
+    INFO = "info"
+    PING = "ping"
+    PONG = "pong"
+    CLOSE = "close"
 
 class ChatContext(BaseModel):
-    """Schema for chat context data."""
-    current_symbol: Optional[str] = None
-    current_timeframe: Optional[str] = None
-    active_portfolio_id: Optional[int] = None
-    user_risk_profile: Optional[str] = Field("moderate", description="User's risk profile for investment suggestions")
+    """Chat context for CHAETRA."""
+    domain: str = Field(default="market")
+    intent: Optional[str] = None
+    symbols: List[str] = Field(default_factory=list)
+    timeframe: Optional[str] = None
+    analysis_type: Optional[str] = None
+    metadata: Dict[str, Any] = Field(default_factory=dict)
 
-# Base schemas
 class ChatSessionBase(BaseModel):
-    """Base schema for chat sessions."""
-    title: Optional[str] = Field(None, max_length=255)
-    context: ChatContext = Field(default_factory=ChatContext)
+    """Base chat session schema."""
+    user_id: int
+    title: Optional[str] = None
+    context: Optional[ChatContext] = None
 
-class ChatMessageBase(BaseModel):
-    """Base schema for chat messages."""
-    content: str = Field(..., min_length=1)
-
-# Create schemas
 class ChatSessionCreate(ChatSessionBase):
-    """Schema for creating a new chat session."""
+    """Create chat session schema."""
     pass
 
-class ChatMessageCreate(BaseModel):
-    """Schema for creating a new chat message."""
-    session_id: Optional[int] = None
-    content: str = Field(..., min_length=1)
+class ChatSessionUpdate(ChatSessionBase):
+    """Update chat session schema."""
+    title: Optional[str] = None
     context: Optional[ChatContext] = None
+    is_active: Optional[bool] = None
+    metadata: Optional[Dict[str, Any]] = None
 
-# Update schemas
-class ChatSessionUpdate(BaseModel):
-    """Schema for updating a chat session."""
-    title: Optional[str] = Field(None, max_length=255)
-    context: Optional[ChatContext] = None
-
-# Response schemas
-class ChatMessageResponse(BaseModel):
-    """Schema for chat message responses."""
+class ChatSession(ChatSessionBase):
+    """Chat session schema."""
     id: int
-    session_id: int
-    role: MessageRole
-    content: str
-    timestamp: datetime
-    context_at_message: Optional[ChatContext] = None
-    assistant_response_details: Optional[Dict[str, Any]] = Field(None, description="Structured response data from assistant if applicable")
-
-    class Config:
-        from_attributes = True
-
-class ChatSessionResponse(ChatSessionBase):
-    """Schema for chat session responses."""
-    id: int
-    user_id: int
     created_at: datetime
-    updated_at: Optional[datetime] = None
-    messages: List[ChatMessageResponse] = []
+    updated_at: datetime
+    is_active: bool = True
+    metadata: Dict[str, Any] = Field(default_factory=dict)
 
-    class Config:
-        from_attributes = True
+    model_config = {
+        "from_attributes": True
+    }
+
+class ChatSessionResponse(ChatSession):
+    """Chat session response schema with messages."""
+    messages: List['ChatMessageResponse'] = Field(default_factory=list)
+    total_messages: int = 0
+
+    model_config = {
+        "from_attributes": True
+    }
+
+class ChatMessageBase(BaseModel):
+    """Base chat message schema."""
+    content: str
+    session_id: int
+    context: Optional[ChatContext] = None
+
+class ChatMessageCreate(ChatMessageBase):
+    """Create chat message schema."""
+    pass
+
+class ChatMessage(ChatMessageBase):
+    """Chat message schema."""
+    id: int
+    user_id: Optional[int] = None
+    created_at: datetime
+    role: str = "user"
+    metadata: Dict[str, Any] = Field(default_factory=dict)
+
+    model_config = {
+        "from_attributes": True
+    }
+
+class ChatMessageResponse(ChatMessage):
+    """Chat message response schema."""
+    feedback: Optional['MessageFeedback'] = None
+    events: List['ProcessingEvent'] = Field(default_factory=list)
+    assistant_response: Optional[str] = None
+    processing_time: Optional[float] = None
+    assistant_response_details: Optional[Dict[str, Any]] = Field(default_factory=dict)
+    context_at_message: Optional[ChatContext] = None
+
+    @property
+    def timestamp(self) -> datetime:
+        """Get message timestamp (same as created_at)."""
+        return self.created_at
+
+    model_config = {
+        "from_attributes": True,
+        "json_encoders": {datetime: lambda dt: dt.isoformat()}
+    }
+
+class MessageFeedback(BaseModel):
+    """Message feedback schema."""
+    message_id: int
+    user_id: int
+    rating: int = Field(..., ge=1, le=5)
+    comment: Optional[str] = None
+    created_at: datetime = Field(default_factory=datetime.utcnow)
+    metadata: Dict[str, Any] = Field(default_factory=dict)
+
+    model_config = {
+        "from_attributes": True,
+        "json_encoders": {datetime: lambda dt: dt.isoformat()}
+    }
+
+class ProcessingEvent(BaseModel):
+    """Event during message processing."""
+    event: ProcessingEventType
+    message: str
+    data: Optional[Dict[str, Any]] = None
+    timestamp: datetime = Field(default_factory=datetime.utcnow)
+
+class ChatResponse(BaseModel):
+    """Response message schema."""
+    content: str
+    events: List[ProcessingEvent] = Field(default_factory=list)
+    metadata: Dict[str, Any] = Field(default_factory=dict)
 
 class ChatResponseSchema(BaseModel):
-    """Schema for the API response after processing a user's chat message."""
+    """Complete response schema."""
     session_id: int
     user_message: ChatMessageResponse
     assistant_message: ChatMessageResponse
-    updated_context: ChatContext
+    updated_context: ChatContext = Field(default_factory=ChatContext)
 
-# List schemas
-class ChatSessionList(BaseModel):
-    """Schema for list of chat sessions."""
-    items: List[ChatSessionResponse]
-    total: int
-
-class ChatMessageList(BaseModel):
-    """Schema for list of chat messages."""
-    items: List[ChatMessageResponse]
-    total: int
-
-# Feedback schemas
-class FeedbackType(str, Enum):
-    """Types of feedback that can be provided."""
-    HELPFUL = "helpful"
-    NOT_HELPFUL = "not_helpful"
-    INCORRECT = "incorrect"
-    NEEDS_CLARIFICATION = "needs_clarification"
-    IRRELEVANT = "irrelevant"
-
-class MessageFeedback(BaseModel):
-    """Schema for providing feedback on a message."""
-    type: FeedbackType
-    comment: Optional[str] = Field(None, max_length=1000)
-    context: Optional[Dict[str, Any]] = None  # Additional context/metadata about the feedback
-    rating: Optional[int] = Field(None, ge=1, le=5)  # Optional 1-5 rating
-
-    class Config:
-        schema_extra = {
-            "example": {
-                "type": "helpful",
-                "comment": "The analysis was very clear and actionable",
-                "rating": 5,
-                "context": {"market_condition": "bullish", "acted_on_advice": True}
-            }
-        }
-
-# Streaming Schemas
-class StreamEventType(str, Enum):
-    """Types of events in a streaming response."""
-    PROCESSING = "processing"
-    INTENT = "intent"
-    DATA_FETCH = "data_fetch"
-    ANALYSIS = "analysis"
-    FINAL = "final"
-    ERROR = "error"
+    model_config = {
+        "from_attributes": True,
+        "json_encoders": {datetime: lambda dt: dt.isoformat()}
+    }
 
 class StreamEvent(BaseModel):
-    """Schema for a single event in a streaming response."""
-    event: StreamEventType
-    data: str # Can be a simple string for processing messages, or JSON string for complex data
-    timestamp: datetime = Field(default_factory=datetime.utcnow)
+    """Event streamed to WebSocket clients."""
+    event: Union[ProcessingEventType, str]  # Allow string for legacy events and direct WebSocket control
+    data: Union[str, Dict[str, Any]]
+    timestamp: str
+    metadata: Optional[Dict[str, Any]] = None
+    
+    @property
+    def is_control_event(self) -> bool:
+        """Check if this is a WebSocket control event (ping/pong/close)."""
+        return self.event in [ProcessingEventType.PING, ProcessingEventType.PONG, ProcessingEventType.CLOSE]
 
-    class Config:
-        from_attributes = True
+__all__ = [
+    'ProcessingEventType',
+    'ChatContext',
+    'ChatSessionBase',
+    'ChatSessionCreate',
+    'ChatSessionUpdate',
+    'ChatSession',
+    'ChatSessionResponse',
+    'ChatMessageBase',
+    'ChatMessageCreate',
+    'ChatMessage',
+    'ChatMessageResponse',
+    'MessageFeedback',
+    'ProcessingEvent',
+    'ChatResponse',
+    'ChatResponseSchema',
+    'StreamEvent'
+]

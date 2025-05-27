@@ -1,61 +1,59 @@
-"""
-NAETRA Core Package
+"""Core module initialization."""
+from typing import TYPE_CHECKING
 
-Core components and utilities for the NAETRA application:
-- Configuration management
-- Database setup and connections
-- Security and authentication
-- Logging and caching
-- Base models and shared utilities
-"""
+from .database import Base, async_engine, async_session_maker, get_db
 
-from .config import settings
-from .database import (
-    Base,
-    get_db,
-    init_db,
-    async_session_maker,
-    get_async_session
-)
-from .security import (
-    create_access_token,
-    verify_access_token,
-    get_password_hash,
-    verify_password,
-    oauth2_scheme
-)
-from .logging import setup_logging, get_logger
-from .cache import RedisCache # get_redis_client is not defined in cache.py
-from .models import TimestampMixin, UUIDMixin # BaseModel is not defined in app/core/models.py
+def _load_settings():
+    from .config import settings
+    return settings
+
+def _load_security():
+    from .security import (
+        get_password_hash,
+        verify_password,
+        create_access_token,
+        verify_access_token,
+        get_current_user
+    )
+    return (
+        get_password_hash,
+        verify_password,
+        create_access_token,
+        verify_access_token,
+        get_current_user
+    )
+
+if TYPE_CHECKING:
+    from typing import Callable
+    from fastapi import Depends
+    from app.models.user import User
+    from .config import Settings
+
+    def get_password_hash(password: str) -> str: ...
+    def verify_password(plain_password: str, hashed_password: str) -> bool: ...
+    def create_access_token(data: dict) -> str: ...
+    def verify_access_token(token: str) -> dict: ...
+    def get_current_user(token: str = Depends()) -> User: ...
+    settings: Settings
+else:
+    settings = _load_settings()
+    (
+        get_password_hash,
+        verify_password,
+        create_access_token,
+        verify_access_token,
+        get_current_user
+    ) = _load_security()
 
 __all__ = [
-    # Configuration
     'settings',
-    
-    # Database
     'Base',
-    'get_db',
-    'init_db',
+    'async_engine',
     'async_session_maker',
-    'get_async_session',
-    
-    # Security
-    'create_access_token',
-    'verify_access_token',
+    'get_db',
     'get_password_hash',
     'verify_password',
-    'oauth2_scheme',
-    
-    # Logging
-    'setup_logging',
-    'get_logger',
-    
-    # Caching
-    # 'get_redis_client', # Removed as it's not defined in cache.py
-    'RedisCache',
-    
-    # Base Models
-    # 'BaseModel', # Removed as it's not defined in app/core/models.py; use app.core.database.Base for SQLAlchemy
-    'TimestampMixin',
-    'UUIDMixin',
+    'create_access_token', 
+    'verify_access_token',
+    'get_current_user'
 ]

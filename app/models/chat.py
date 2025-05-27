@@ -2,9 +2,10 @@
 Chat models for user interactions and conversations.
 """
 
-from sqlalchemy import Column, Integer, String, ForeignKey, Text, JSON, Boolean, Enum as SQLEnum
+from sqlalchemy import Column, Integer, String, ForeignKey, Text, JSON, Boolean, Enum as SQLEnum, DateTime, func
 from sqlalchemy.orm import relationship
 import enum
+from datetime import datetime
 from app.core.database import Base
 from app.core.models import TimestampMixin, UUIDMixin
 
@@ -47,8 +48,8 @@ class ChatMessage(Base, TimestampMixin, UUIDMixin):
     session_id = Column(Integer, ForeignKey("chat_sessions.id"), nullable=False)
     role = Column(SQLEnum(MessageRole), nullable=False)
     content = Column(Text, nullable=False)
-    message_metadata = Column(JSON)  # For storing additional message data
-
+    message_metadata = Column(JSON, default={})  # For storing additional message data
+    
     # Optional fields for tracking analysis results
     analysis_id = Column(Integer, ForeignKey("analyses.id"))
     analysis_result_id = Column(Integer, ForeignKey("analysis_results.id"))
@@ -60,3 +61,8 @@ class ChatMessage(Base, TimestampMixin, UUIDMixin):
 
     def __repr__(self):
         return f"<ChatMessage(id={self.id}, role={self.role}, session_id={self.session_id})>"
+
+    @property
+    def timestamp(self) -> datetime:
+        """Get message timestamp (alias for created_at)."""
+        return self.created_at

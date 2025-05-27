@@ -2,107 +2,133 @@
 from typing import Dict, Any, List, Optional
 from datetime import datetime
 import uuid
-from app.core.cache import RedisCache
-from app.chaetra.interfaces import IMemorySystem, MemoryItem
+from collections import defaultdict
+from dataclasses import asdict
+
+from app.chaetra.interfaces import MemoryItem, IMemorySystem
+from app.chaetra.utils.event_system import get_event_system
+from app.schemas.chat_schemas import ProcessingEventType
 
 class MemorySystem(IMemorySystem):
-    """Implementation of the memory system."""
-
-    def __init__(self, cache: RedisCache):
-        self.cache = cache
-        self.short_term_cache_prefix = "st_memory:"
-        self.core_memory_cache_prefix = "core_memory:"
-
-    async def add_to_short_term(
-        self, 
-        content: Dict[str, Any], 
-        source: str, 
-        tags: List[str] = None
-    ) -> MemoryItem:
-        """Add item to short-term memory."""
+    def __init__(self):
+        """Initialize memory system."""
+        self.memories: Dict[str, MemoryItem] = {}
+        self.index: defaultdict = defaultdict(list)
+        self.event_system = get_event_system()
+        
+    async def store_memory(self, item: Dict[str, Any]) -> str:
+        """Store a new memory item."""
+        # Generate unique ID
+        memory_id = str(uuid.uuid4())
+        
+        # Create memory item
         memory_item = MemoryItem(
-            id=uuid.uuid4(),
-            content=content,
-            source=source,
+            id=memory_id,
+            content=item,
+            relevance=1.0,  # Initial relevance
             timestamp=datetime.utcnow(),
-            memory_type="short_term",
-            confidence=0.0,
-            validation_count=0,
-            tags=tags or [],
-            metadata={}
+            metadata=item.get("metadata")
         )
         
-        # Store in Redis with TTL
-        await self.cache.set(
-            f"{self.short_term_cache_prefix}{memory_item.id}",
-            memory_item.__dict__,
-            ttl=86400  # 24 hours TTL for short-term memory
-        )
-        return memory_item
-
-    async def move_to_core(self, memory_item: MemoryItem) -> bool:
-        """Move item from short-term to core memory."""
-        try:
-            # Update memory type
-            memory_item.memory_type = "core"
-            
-            # Remove from short-term
-            await self.cache.delete(f"{self.short_term_cache_prefix}{memory_item.id}")
-            
-            # Add to core memory (no TTL)
-            await self.cache.set(
-                f"{self.core_memory_cache_prefix}{memory_item.id}",
-                memory_item.__dict__
-            )
-            return True
-        except Exception as e:
-            # Log error and return False
-            print(f"Error moving memory to core: {e}")
-            return False
-
+        # Store memory
+        self.memories[memory_id] = memory_item
+        
+        # Index memory content for retrieval
+        self._index_memory(memory_item)
+        
+        return memory_id
+        
     async def retrieve_memory(
-        self, 
+        self,
         query: Dict[str, Any],
-        memory_type: str = "all",
-        limit: int = 10
+        limit: Optional[int] = None
     ) -> List[MemoryItem]:
-        """Retrieve memories matching the query."""
-        memories = []
+        """Retrieve relevant memories based on query."""
+        session_id = query.get("session_id", 0)
         
-        # Determine which cache prefixes to search based on memory_type
-        prefixes = []
-        if memory_type in ["all", "short_term"]:
-            prefixes.append(self.short_term_cache_prefix)
-        if memory_type in ["all", "core"]:
-            prefixes.append(self.core_memory_cache_prefix)
+        await self.event_system.emit(
+            session_id,
+            ProcessingEventType.PROCESSING,
+            "Searching memory store...",
+            {"query": query}
+        )
         
-        # Search through all relevant memory items
-        for prefix in prefixes:
-            # Get all keys with this prefix
-            keys = await self.cache.scan(f"{prefix}*")
-            for key in keys:
-                # Get memory item data
-                memory_data = await self.cache.get(key)
-                if memory_data:
-                    # Check if memory matches query
-                    if self._matches_query(memory_data, query):
-                        memories.append(MemoryItem(**memory_data))
-                        if len(memories) >= limit:
-                            break
-            if len(memories) >= limit:
-                break
+        # Find relevant memories
+        relevant_memories = []
+        for memory in self.memories.values():
+            relevance_score = self._calculate_relevance(memory, query)
+            if relevance_score > query.get("confidence_threshold", 0.5):
+                # Update memory relevance
+                memory.relevance = relevance_score
+                relevant_memories.append(memory)
+        
+        # Sort by relevance and recency
+        relevant_memories.sort(
+            key=lambda x: (
+                x.relevance * query.get("recency_weight", 0.7) +
+                (1 - query.get("recency_weight", 0.7)) * 
+                (datetime.utcnow() - x.timestamp).total_seconds()
+            ),
+            reverse=True
+        )
+        
+        # Apply limit if specified
+        if limit:
+            relevant_memories = relevant_memories[:limit]
+            
+        await self.event_system.emit(
+            session_id,
+            ProcessingEventType.PROCESSING,
+            "Memory retrieval complete",
+            {
+                "found_count": len(relevant_memories),
+                "relevance_scores": [m.relevance for m in relevant_memories]
+            }
+        )
+        
+        return relevant_memories
+    
+    def _calculate_relevance(self, memory: MemoryItem, query: Dict[str, Any]) -> float:
+        """Calculate relevance score for a memory item against a query."""
+        # Simple relevance calculation - could be enhanced with embeddings, etc.
+        relevance = 0.0
+        query_relevance = query.get("relevance_to", "")
+        
+        # Check primary content match
+        if query_relevance in str(memory.content):
+            relevance += 0.5
+            
+        # Check context match
+        query_context = query.get("context_match", {})
+        memory_context = memory.content.get("context", {})
+        
+        matching_context = sum(
+            1 for k, v in query_context.items()
+            if k in memory_context and memory_context[k] == v
+        )
+        if matching_context:
+            relevance += 0.3 * (matching_context / len(query_context))
+            
+        # Add metadata match
+        if memory.metadata and query.get("metadata"):
+            matching_meta = sum(
+                1 for k, v in query.get("metadata", {}).items()
+                if k in memory.metadata and memory.metadata[k] == v
+            )
+            if matching_meta:
+                relevance += 0.2 * (matching_meta / len(query.get("metadata")))
                 
-        return memories[:limit]
-
-    def _matches_query(self, memory_data: Dict[str, Any], query: Dict[str, Any]) -> bool:
-        """Check if memory data matches the query criteria."""
-        for key, value in query.items():
-            if key not in memory_data:
-                return False
-            if isinstance(value, list):
-                # For lists (like tags), check for any overlap
-                if not any(v in memory_data[key] for v in value):
-                    return False
-            elif memory_data[key] != value:
-                return False
-        return True
+        return min(1.0, relevance)
+    
+    def _index_memory(self, memory: MemoryItem) -> None:
+        """Index memory item for faster retrieval."""
+        # Index main content tokens
+        content_str = str(memory.content)
+        for token in content_str.split():
+            self.index[token].append(memory.id)
+            
+        # Index metadata tokens if present
+        if memory.metadata:
+            meta_str = str(memory.metadata)
+            for token in meta_str.split():
+                self.index[token].append(memory.id)

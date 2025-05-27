@@ -94,11 +94,38 @@ const ChatMessage: React.FC<ChatMessageProps> = ({
               </Typography>
 
               {(isProcessing ? processingUpdates : messageDetails?.assistant_response_details?.naetra_thought_process)?.map((item, index) => {
-                const update = typeof item === 'string' ? { type: 'info', message: item } : item;
+                const update = typeof item === 'string' 
+                  ? { type: 'info', message: item, timestamp: new Date().toISOString() } 
+                  : item;
                 return (
-                  <Box key={index} sx={{ display: 'flex', alignItems: 'flex-start', mb: 0.5 }}>
-                    <Box sx={{ mr: 1, color: theme.palette.text.disabled }}>•</Box>
-                    <Box>{update.message}</Box>
+                  <Box key={index} sx={{ 
+                    display: 'flex', 
+                    alignItems: 'flex-start', 
+                    mb: 0.5,
+                    opacity: isProcessing ? 1 : 0.8,  // Slightly dim completed items
+                    animation: isProcessing ? 'fadeIn 0.3s ease-in' : 'none',
+                    '@keyframes fadeIn': {
+                      from: { opacity: 0 },
+                      to: { opacity: 1 }
+                    }
+                  }}>
+                    <Box sx={{ 
+                      mr: 1, 
+                      color: update.type === 'error' 
+                        ? theme.palette.error.main 
+                        : theme.palette.text.disabled 
+                    }}>•</Box>
+                    <Box sx={{ flex: 1 }}>{update.message}</Box>
+                    {update.timestamp && (
+                      <Box sx={{ 
+                        ml: 2, 
+                        fontSize: '0.75rem', 
+                        color: theme.palette.text.disabled,
+                        whiteSpace: 'nowrap'
+                      }}>
+                        {new Date(update.timestamp).toLocaleTimeString()}
+                      </Box>
+                    )}
                   </Box>
                 );
               })}

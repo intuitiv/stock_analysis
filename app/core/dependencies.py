@@ -1,184 +1,165 @@
-# app/core/dependencies.py
-from fastapi import Depends
+"""Dependency injection utilities."""
+from typing import AsyncGenerator, Optional
+import logging
 
-from app.core.config import settings # Required by some service constructors implicitly or explicitly
+from fastapi import Depends
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.core.database import get_db, async_session_maker
+from app.core.security import get_current_active_user
+from app.models.user import User
+from app.services.market_data_service import MarketDataService
+from app.services.analysis_service import AnalysisService
+from app.services.analysis.technical import TechnicalAnalyzer
+from app.services.analysis.fundamental import FundamentalAnalyzer
+from app.services.analysis.sentiment import SentimentAnalyzer
+from app.chaetra.brain import CHAETRA
 from app.core.cache import RedisCache
 from app.chaetra.llm import LLMManager
 from app.chaetra.memory import MemorySystem
 from app.chaetra.learning import LearningSystem
 from app.chaetra.reasoning import ReasoningSystem
 from app.chaetra.opinion import OpinionSystem
-from app.chaetra.brain import CHAETRA
-from app.services.market_data_service import MarketDataService
-from app.services.analysis.technical import TechnicalAnalyzer
-from app.services.analysis.fundamental import FundamentalAnalyzer
-from app.services.analysis.sentiment import SentimentAnalyzer
-from app.services.analysis_service import AnalysisService
 from app.services.user_service import UserService
-from app.services.portfolio_service import PortfolioService
 from app.services.chat_service import ChatService
+from app.services.portfolio_service import PortfolioService
 
-# --- Singleton Instances for Dependency Injection ---
-# These are initialized once and provided via getter functions.
+logger = logging.getLogger(__name__)
 
-# Cache
-# Note: RedisCache constructor might implicitly use settings if designed that way,
-# or it might need settings passed if it's refactored. For now, assume it handles it.
-# Initialize Redis cache first
-redis_cache_instance = RedisCache()
+# Global instances
+_redis_cache: Optional[RedisCache] = None
+_llm_manager: Optional[LLMManager] = None
+_chaetra_brain: Optional[CHAETRA] = None
+_market_data_service: Optional[MarketDataService] = None
+_user_service: Optional[UserService] = None
+_portfolio_service: Optional[PortfolioService] = None
+_chat_service: Optional[ChatService] = None
 
-# Initialize basic memory system
-memory_system_instance = MemorySystem(cache=redis_cache_instance)
-
-# Instances will be initialized in setup_dependencies()
-llm_manager_instance = None
-learning_system_instance = None
-reasoning_system_instance = None
-opinion_system_instance = None
-chaetra_brain_instance = None
-
-async def setup_dependencies():
-    """Initialize dependencies that require async setup"""
-    global llm_manager_instance, learning_system_instance, reasoning_system_instance
-    global opinion_system_instance, chaetra_brain_instance
-    global sentiment_analyzer_instance, analysis_service_instance
-
-    if llm_manager_instance is None: # Ensure it's only created once
-        llm_manager_instance = await LLMManager.create()
-
-    if learning_system_instance is None:
-        learning_system_instance = LearningSystem(memory_system=memory_system_instance)
+async def setup_dependencies() -> None:
+    """Initialize all global service dependencies."""
+    global _redis_cache, _llm_manager, _chaetra_brain, _market_data_service
+    global _user_service, _portfolio_service, _chat_service
     
-    if reasoning_system_instance is None:
-        reasoning_system_instance = ReasoningSystem(
-            memory_system=memory_system_instance,
-            learning_system=learning_system_instance,
-            llm_manager=llm_manager_instance
+    try:
+        # Initialize Redis cache
+        _redis_cache = RedisCache()
+        await _redis_cache.connect()
+        
+        # Initialize LLM manager
+        _llm_manager = LLMManager()
+        
+        # Initialize CHAETRA brain with required dependencies
+        memory_system = MemorySystem()
+        learning_system = LearningSystem()
+        reasoning_system = ReasoningSystem()
+        opinion_system = OpinionSystem()
+        
+        _chaetra_brain = CHAETRA(
+            memory_system=memory_system,
+            learning_system=learning_system,
+            reasoning_system=reasoning_system,
+            opinion_system=opinion_system,
+            llm_manager=_llm_manager
         )
-    
-    if opinion_system_instance is None:
-        opinion_system_instance = OpinionSystem(
-            memory_system=memory_system_instance,
-            llm_manager=llm_manager_instance
+        
+        # Initialize services
+        _market_data_service = MarketDataService(cache=_redis_cache)
+        _user_service = UserService()  # Doesn't need session_factory, uses static methods
+        _portfolio_service = PortfolioService(async_session_maker)
+        _chat_service = ChatService(
+            session_factory=async_session_maker,
+            memory_system=memory_system,  # Reuse memory_system from CHAETRA
+            chaetra_brain=_chaetra_brain,
+            market_data_service=_market_data_service
         )
-
-    if chaetra_brain_instance is None:
-        chaetra_brain_instance = await CHAETRA.get_instance(
-            memory_system=memory_system_instance,
-            learning_system=learning_system_instance,
-            reasoning_system=reasoning_system_instance,
-            opinion_system=opinion_system_instance,
-            llm_manager=llm_manager_instance
-        )
-
-    if sentiment_analyzer_instance is None:
-        sentiment_analyzer_instance = SentimentAnalyzer(
-            market_data_service=market_data_service_instance,
-            llm_manager=llm_manager_instance
-        )
-
-    if analysis_service_instance is None:
-        analysis_service_instance = AnalysisService(
-            market_data_service=market_data_service_instance,
-            technical_analyzer=technical_analyzer_instance,
-            fundamental_analyzer=fundamental_analyzer_instance,
-            sentiment_analyzer=sentiment_analyzer_instance,
-            chaetra_brain=chaetra_brain_instance
-        )
-    
-    # Ensure all global instances are set before returning
-    # This function is primarily for its side effects (setting global instances)
-
-# Application Services - some will be initialized in setup_dependencies
-market_data_service_instance = MarketDataService(cache=redis_cache_instance)
-technical_analyzer_instance = TechnicalAnalyzer()
-fundamental_analyzer_instance = FundamentalAnalyzer(market_data_service=market_data_service_instance)
-user_service_instance = UserService()
-portfolio_service_instance = PortfolioService(market_data_service=market_data_service_instance)
-
-# These depend on async initialized llm_manager or chaetra_brain
-sentiment_analyzer_instance = None
-analysis_service_instance = None
-# --- Dependency Provider Functions ---
-# These functions will be used by FastAPI's `Depends` system.
+        
+        logger.info("All dependencies initialized successfully")
+    except Exception as e:
+        logger.error(f"Failed to initialize dependencies: {e}")
+        raise
 
 def get_redis_cache() -> RedisCache:
-    return redis_cache_instance
+    """Get Redis cache instance."""
+    if not _redis_cache:
+        raise RuntimeError("Redis cache not initialized")
+    return _redis_cache
 
-async def get_llm_manager() -> LLMManager:
-    if llm_manager_instance is None:
-        await setup_dependencies() # Ensure dependencies are set up if not already
-    return llm_manager_instance
+def get_llm_manager() -> LLMManager:
+    """Get LLM manager instance."""
+    if not _llm_manager:
+        raise RuntimeError("LLM manager not initialized")
+    return _llm_manager
 
-def get_memory_system() -> MemorySystem:
-    return memory_system_instance
-
-def get_learning_system() -> LearningSystem:
-    if learning_system_instance is None:
-        # This indicates a setup issue if LLMManager was needed for it
-        raise RuntimeError("Learning system not initialized. Call setup_dependencies().")
-    return learning_system_instance
-
-def get_reasoning_system() -> ReasoningSystem:
-    if reasoning_system_instance is None:
-        raise RuntimeError("Reasoning system not initialized. Call setup_dependencies().")
-    return reasoning_system_instance
-
-def get_opinion_system() -> OpinionSystem:
-    if opinion_system_instance is None:
-        raise RuntimeError("Opinion system not initialized. Call setup_dependencies().")
-    return opinion_system_instance
-
-async def get_chaetra_brain() -> CHAETRA:
-    if chaetra_brain_instance is None:
-        await setup_dependencies() # Ensure dependencies are set up
-    return chaetra_brain_instance
-
-def get_market_data_service() -> MarketDataService:
-    return market_data_service_instance
-
-def get_technical_analyzer() -> TechnicalAnalyzer:
-    return technical_analyzer_instance
-
-def get_fundamental_analyzer() -> FundamentalAnalyzer:
-    return fundamental_analyzer_instance
-
-def get_sentiment_analyzer() -> SentimentAnalyzer:
-    if sentiment_analyzer_instance is None:
-         raise RuntimeError("Sentiment analyzer not initialized. Call setup_dependencies().")
-    return sentiment_analyzer_instance
-
-def get_analysis_service() -> AnalysisService:
-    if analysis_service_instance is None:
-        raise RuntimeError("Analysis service not initialized. Call setup_dependencies().")
-    return analysis_service_instance
+def get_chaetra_brain() -> CHAETRA:
+    """Get CHAETRA brain instance."""
+    if not _chaetra_brain:
+        raise RuntimeError("CHAETRA brain not initialized")
+    return _chaetra_brain
 
 def get_user_service() -> UserService:
-    return user_service_instance
+    """Get user service instance."""
+    if not _user_service:
+        raise RuntimeError("User service not initialized")
+    return _user_service
 
 def get_portfolio_service() -> PortfolioService:
-    return portfolio_service_instance
+    """Get portfolio service instance."""
+    if not _portfolio_service:
+        raise RuntimeError("Portfolio service not initialized")
+    return _portfolio_service
 
-# chat_service_instance is created per-request due to async dependencies
-async def get_chat_service(
-    chaetra_brain_dep: CHAETRA = Depends(get_chaetra_brain), # Renamed to avoid conflict
-    market_data_service_dep: MarketDataService = Depends(get_market_data_service), # Renamed
-    analysis_service_dep: AnalysisService = Depends(get_analysis_service) # Renamed
-) -> ChatService:
-    # Ensure global instances are used if already initialized by setup_dependencies
-    # This is a bit redundant if setup_dependencies is guaranteed to run at startup,
-    # but acts as a safeguard for direct calls to get_chat_service if that were possible.
-    global chaetra_brain_instance, market_data_service_instance, analysis_service_instance
+def get_chat_service() -> ChatService:
+    """Get chat service instance."""
+    if not _chat_service:
+        raise RuntimeError("Chat service not initialized")
+    return _chat_service
+
+async def get_db_session() -> AsyncGenerator[AsyncSession, None]:
+    """Get database session."""
+    async for session in get_db():
+        yield session
+
+async def get_current_user(
+    db: AsyncSession = Depends(get_db_session),
+    user: User = Depends(get_current_active_user)
+) -> User:
+    """Get current user with database session."""
+    return user
+
+async def get_market_data_service() -> MarketDataService:
+    """Get market data service instance."""
+    if not _market_data_service:
+        raise RuntimeError("Market data service not initialized")
+    return _market_data_service
+
+async def get_analysis_service(
+    market_data_service: MarketDataService = Depends(get_market_data_service)
+) -> AsyncGenerator[AnalysisService, None]:
+    """Get analysis service instance."""
+    technical_analyzer = TechnicalAnalyzer()
+    fundamental_analyzer = FundamentalAnalyzer()
+    sentiment_analyzer = SentimentAnalyzer()
+    memory_system = MemorySystem()
+    learning_system = LearningSystem()
+    reasoning_system = ReasoningSystem()
+    opinion_system = OpinionSystem()
     
-    # Use the instances from Depends if they are correctly resolved by FastAPI
-    # If not, this indicates a deeper issue with FastAPI's handling of async Depends at this point.
-    # However, FastAPI should resolve these correctly.
-    
-    # The Depends mechanism should provide the initialized instances.
-    # If chaetra_brain_instance is None here, it means setup_dependencies wasn't awaited properly at startup.
-    
-    return ChatService(
-        chaetra_brain=chaetra_brain_dep,
-        market_data_service=market_data_service_dep,
-        analysis_service=analysis_service_dep
+    chaetra = CHAETRA(
+        memory_system=memory_system,
+        learning_system=learning_system,
+        reasoning_system=reasoning_system,
+        opinion_system=opinion_system,
+        llm_manager=get_llm_manager()
     )
+    
+    service = AnalysisService(
+        market_data_service=market_data_service,
+        technical_analyzer=technical_analyzer,
+        fundamental_analyzer=fundamental_analyzer,
+        sentiment_analyzer=sentiment_analyzer,
+        chaetra_brain=chaetra
+    )
+    try:
+        yield service
+    finally:
+        await chaetra.close()

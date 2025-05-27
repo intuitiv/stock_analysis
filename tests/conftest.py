@@ -1,204 +1,87 @@
-"""
-PyTest configuration and shared fixtures.
-"""
-
-import os
-import pytest
+"""Test fixtures."""
 import asyncio
-from typing import AsyncGenerator, Generator
-from datetime import datetime
-
+import pytest
+from fastapi import FastAPI
+from httpx import AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
 from sqlalchemy.orm import sessionmaker
 
-from app.core.config import get_settings
-from app.core.database import Base, get_db
-from app.core.cache import cache
-from app.chaetra.brain import CHAETRA as Brain
-from app.chaetra.interfaces import Evidence
+from app.core.config import Settings
+from app.core.security import get_password_hash
+from app.models.user import User
+from app.main import create_app
 
-settings = get_settings()
-
-# Use test database and Redis
-TEST_DATABASE_URL = "postgresql+asyncpg://localhost/test_naetra_db"
-TEST_REDIS_URL = "redis://localhost:6379/1"  # Use DB 1 for testing
-
-# Override settings for testing
-os.environ["DATABASE_URL"] = TEST_DATABASE_URL
-os.environ["REDIS_URL"] = TEST_REDIS_URL
-os.environ["ENVIRONMENT"] = "test"
-
-# Create test engine
-test_engine = create_async_engine(TEST_DATABASE_URL, echo=False)
-TestingSessionLocal = sessionmaker(
-    test_engine,
-    class_=AsyncSession,
-    expire_on_commit=False,
-    autocommit=False,
-    autoflush=False
+# Test settings
+test_settings = Settings(
+    database_url="sqlite+aiosqlite:///./test.db",
+    database_echo=True,
+    secret_key="test-secret-key",
 )
 
+# Test database engine
+test_engine = create_async_engine(
+    test_settings.database_url,
+    echo=test_settings.database_echo
+)
+
+# Test session factory
+TestSessionLocal = sessionmaker(
+    test_engine,
+    class_=AsyncSession,
+    expire_on_commit=False
+)
+
+@pytest.fixture
+async def app() -> FastAPI:
+    """Create test app."""
+    return create_app()
+
+@pytest.fixture
+async def client(app: FastAPI) -> AsyncClient:
+    """Create test client."""
+    async with AsyncClient(app=app, base_url="http://test") as client:
+        yield client
+
+@pytest.fixture
+async def test_db() -> AsyncSession:
+    """Create test database session."""
+    async with TestSessionLocal() as session:
+        yield session
+        await session.rollback()
+
+@pytest.fixture
+async def test_user(test_db: AsyncSession) -> User:
+    """Create test user."""
+    user = User(
+        username="testuser",
+        email="test@example.com",
+        hashed_password=get_password_hash("testpassword123"),
+        is_active=True
+    )
+    test_db.add(user)
+    await test_db.commit()
+    await test_db.refresh(user)
+    return user
+
+@pytest.fixture
+async def test_auth_headers(client: AsyncClient, test_user: User) -> dict:
+    """Create test authentication headers."""
+    response = await client.post(
+        "/api/v1/auth/login",
+        json={
+            "username": test_user.username,
+            "password": "testpassword123"
+        }
+    )
+    token = response.json()["access_token"]
+    return {"Authorization": f"Bearer {token}"}
+
 @pytest.fixture(scope="session")
-def event_loop() -> Generator:
-    """Create event loop for async tests"""
+def event_loop():
+    """Create event loop."""
     try:
-        loop = asyncio.get_event_loop()
+        loop = asyncio.get_running_loop()
     except RuntimeError:
         loop = asyncio.new_event_loop()
     yield loop
     loop.close()
-
-@pytest.fixture(autouse=True)
-async def setup_database() -> AsyncGenerator:
-    """Set up test database before each test"""
-    # Create tables
-    async with test_engine.begin() as conn:
-        await conn.run_sync(Base.metadata.drop_all)
-        await conn.run_sync(Base.metadata.create_all)
-    
-    yield
-    
-    # Clean up
-    async with test_engine.begin() as conn:
-        await conn.run_sync(Base.metadata.drop_all)
-
-@pytest.fixture
-async def db_session() -> AsyncGenerator[AsyncSession, None]:
-    """Database session fixture"""
-    async with TestingSessionLocal() as session:
-        try:
-            yield session
-            await session.commit()
-        except Exception:
-            await session.rollback()
-            raise
-        finally:
-            await session.close()
-
-@pytest.fixture(autouse=True)
-async def override_get_db(db_session: AsyncSession) -> AsyncGenerator:
-    """Override database dependency"""
-    async def _get_test_db():
-        try:
-            yield db_session
-        finally:
-            pass
-    
-    # Replace the dependency
-    get_db.__wrapped__ = _get_test_db
-    yield
-    # Restore original
-    get_db.__wrapped__ = get_db.__original_wrapped__
-
-@pytest.fixture(autouse=True)
-async def clean_redis() -> AsyncGenerator:
-    """Clean Redis before each test"""
-    await cache.clear()
-    yield
-    await cache.clear()
-
-@pytest.fixture
-def sample_evidence() -> Evidence:
-    """Create sample evidence for testing"""
-    return Evidence(
-        source="test",
-        content={"test": "data"},
-        confidence=0.8,
-        timestamp=datetime.utcnow()
-    )
-
-@pytest.fixture
-def sample_market_data() -> dict:
-    """Create sample market data for testing"""
-    return {
-        "symbol": "TEST",
-        "timestamp": datetime.utcnow().isoformat(),
-        "price": 100.0,
-        "volume": 1000000,
-        "indicators": {
-            "rsi": 50,
-            "macd": {"value": 0.5, "signal": 0.3}
-        }
-    }
-
-@pytest.fixture
-async def test_brain() -> AsyncGenerator[CHAETRABrain, None]:
-    """Create test instance of CHAETRA brain"""
-    brain = CHAETRABrain()
-    await brain.initialize()
-    yield brain
-    await brain.shutdown()
-
-# Configure pytest
-def pytest_configure(config):
-    """Configure pytest"""
-    config.addinivalue_line(
-        "markers",
-        "slow: mark test as slow running"
-    )
-    config.addinivalue_line(
-        "markers",
-        "integration: mark test as integration test"
-    )
-
-def pytest_collection_modifyitems(config, items):
-    """Modify test collection"""
-    # Skip slow tests unless explicitly requested
-    if not config.getoption("--runslow"):
-        skip_slow = pytest.mark.skip(reason="need --runslow option to run")
-        for item in items:
-            if "slow" in item.keywords:
-                item.add_marker(skip_slow)
-
-def pytest_addoption(parser):
-    """Add custom command line options"""
-    parser.addoption(
-        "--runslow",
-        action="store_true",
-        default=False,
-        help="run slow tests"
-    )
-
-# Helper functions for tests
-async def create_test_data(db_session: AsyncSession) -> None:
-    """Create test data in database"""
-    # Add implementation as needed for specific tests
-    pass
-
-async def clear_test_data(db_session: AsyncSession) -> None:
-    """Clear test data from database"""
-    # Add implementation as needed for specific tests
-    pass
-
-# Example test data generators
-def generate_market_data(symbol: str = "TEST") -> dict:
-    """Generate test market data"""
-    return {
-        "symbol": symbol,
-        "timestamp": datetime.utcnow().isoformat(),
-        "data": {
-            "price": 100.0,
-            "volume": 1000000,
-            "indicators": {
-                "rsi": 50,
-                "macd": {
-                    "value": 0.5,
-                    "signal": 0.3,
-                    "histogram": 0.2
-                }
-            }
-        }
-    }
-
-def generate_evidence(
-    source: str = "test",
-    confidence: float = 0.8,
-    content: dict = None
-) -> Evidence:
-    """Generate test evidence"""
-    return Evidence(
-        source=source,
-        content=content or {"test": "data"},
-        confidence=confidence,
-        timestamp=datetime.utcnow()
-    )

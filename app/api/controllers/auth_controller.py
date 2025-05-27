@@ -1,84 +1,52 @@
-from fastapi import APIRouter, Depends, HTTPException, status, Body
-from fastapi.security import OAuth2PasswordRequestForm # For standard token endpoint
-from sqlalchemy.orm import Session
-from datetime import timedelta
+"""Authentication controller."""
+from typing import Optional
 
-from app.core.database import get_db # Standard way to get DB session in FastAPI
+from fastapi import Depends, HTTPException, status
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.core.database import get_db
+from app.core.security import get_current_user as get_current_user_security
+from app.models.user import User
+from app.schemas.auth_schemas import (
+    Token,
+    UserCreate,
+    UserLogin,
+    UserResponse,
+    UserUpdate
+)
 from app.services.user_service import UserService
-from app.schemas.auth_schemas import UserCreate, UserResponse, Token, UserLogin
-from app.core.security import create_access_token, get_current_active_user
-from app.models.user import User as UserModel
 
-router = APIRouter()
+async def create_user(db: AsyncSession, user_data: UserCreate) -> UserResponse:
+    """Create new user."""
+    return await UserService.create_user(db, user_data)
 
-# Instantiate UserService here or use a dependency provider if you prefer
-# For simplicity in this context, direct instantiation or a simple factory.
-# A more robust DI system would be better for larger apps.
-# user_service_instance = UserService() # This won't work if UserService needs db session in __init__
+async def authenticate_user(db: AsyncSession, login_data: UserLogin) -> Token:
+    """Authenticate user."""
+    return await UserService.authenticate_user(db, login_data)
 
-# Import the dependency provider from main or a central dependencies file
-from app.core.dependencies import get_user_service
-
-
-@router.post("/register", response_model=UserResponse, status_code=status.HTTP_201_CREATED)
-async def register_user(
-    user_in: UserCreate, 
-    db: Session = Depends(get_db),
-    user_service: UserService = Depends(get_user_service) 
-):
-    """
-    Create a new user.
-    """
-    # The service method already handles username/email conflict checks
-    db_user = await user_service.create_user(db=db, user_in=user_in) # UserService methods take db session
-    return db_user
-
-
-@router.post("/login", response_model=Token)
-async def login_for_access_token(
-    credentials: UserLogin = Body(None), 
-    form_data: OAuth2PasswordRequestForm = Depends(None),
-    db: Session = Depends(get_db),
-    user_service: UserService = Depends(get_user_service)
-):
-    """
-    Login endpoint that accepts both JSON credentials and form data.
-    """
-    # If JSON credentials are provided, use those
-    if credentials:
-        user_login_data = credentials
-    # Otherwise, use form data
-    elif form_data:
-        user_login_data = UserLogin(username=form_data.username, password=form_data.password)
-    else:
+async def get_current_active_user(
+    current_user: User = Depends(get_current_user_security)
+) -> User:
+    """Get current active user."""
+    if not current_user.is_active:
         raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail="No credentials provided"
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Inactive user"
         )
-    token = await user_service.login_user(db=db, login_data=user_login_data)
-    return token
-
-@router.get("/users/me", response_model=UserResponse)
-async def read_users_me(
-    current_user: UserModel = Depends(get_current_active_user)
-):
-    """
-    Get current logged-in user.
-    """
     return current_user
 
+async def get_user_profile(current_user: User) -> UserResponse:
+    """Get user profile."""
+    return current_user
 
-@router.get("/test-auth")
-async def test_auth(
-    current_user: UserModel = Depends(get_current_active_user)
-):
-    """
-    Test endpoint to verify authentication is working.
-    """
-    return {"message": "Authentication successful", "username": current_user.username}
+async def update_user_profile(
+    db: AsyncSession,
+    current_user: User,
+    update_data: UserUpdate
+) -> UserResponse:
+    """Update user profile."""
+    return await UserService.update_user(db, current_user, update_data)
 
-# TODO: Add endpoints for:
-# - Password recovery request
-# - Password reset confirmation
-# - Email verification (if is_active is False by default)
-# - User profile update (e.g., change password, update full_name)
+async def delete_user_account(db: AsyncSession, current_user: User) -> None:
+    """Delete user account."""
+    await UserService.delete_user(db, current_user)
