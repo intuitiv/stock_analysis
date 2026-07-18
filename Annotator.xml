@@ -1,0 +1,15 @@
+<problems>
+<problem>
+  <file>file://$PROJECT_DIR$/app/services/market_data/sec_edgar.py</file>
+  <line>34</line>
+  <module>StockAnalysis</module>
+  <entry_point TYPE="file" FQNAME="file://$PROJECT_DIR$/app/services/market_data/sec_edgar.py" />
+  <problem_class id="Annotator" severity="ERROR" attribute_key="WRONG_REFERENCES_ATTRIBUTES">Annotator</problem_class>
+  <hints />
+  <description>Python version 3.9 does not allow writing union types as X | Y #loc</description>
+  <highlighted_element>str | None</highlighted_element>
+  <language>Python</language>
+  <offset>36</offset>
+  <length>10</length>
+</problem>
+</problems>

@@ -1,0 +1,146 @@
+<problems>
+<problem>
+  <file>file://$PROJECT_DIR$/app/api/controllers/market_controller.py</file>
+  <line>15</line>
+  <module>StockAnalysis</module>
+  <entry_point TYPE="file" FQNAME="file://$PROJECT_DIR$/app/api/controllers/market_controller.py" />
+  <problem_class id="GrazieInspection" severity="GRAMMAR_ERROR" attribute_key="GRAMMAR_ERROR">Grammar</problem_class>
+  <description>The verb 'depend' requires the preposition 'on' (or 'upon').</description>
+  <highlighted_element>Depends</highlighted_element>
+  <language>Python</language>
+  <offset>94</offset>
+  <length>7</length>
+</problem>
+<problem>
+  <file>file://$PROJECT_DIR$/app/chaetra/__init__.py</file>
+  <line>7</line>
+  <module>StockAnalysis</module>
+  <entry_point TYPE="file" FQNAME="file://$PROJECT_DIR$/app/chaetra/__init__.py" />
+  <problem_class id="GrazieInspection" severity="GRAMMAR_ERROR" attribute_key="GRAMMAR_ERROR">Grammar</problem_class>
+  <description>The noun decision-making (= the process of deciding something) is spelled with a hyphen.</description>
+  <highlighted_element>decision making</highlighted_element>
+  <language>Python</language>
+  <offset>33</offset>
+  <length>15</length>
+</problem>
+<problem>
+  <file>file://$PROJECT_DIR$/app/chaetra/brain.py</file>
+  <line>6</line>
+  <module>StockAnalysis</module>
+  <entry_point TYPE="file" FQNAME="file://$PROJECT_DIR$/app/chaetra/brain.py" />
+  <problem_class id="GrazieInspection" severity="GRAMMAR_ERROR" attribute_key="GRAMMAR_ERROR">Grammar</problem_class>
+  <description>The verb 'to depend' requires the preposition '(up)on'.</description>
+  <highlighted_element>Depends for</highlighted_element>
+  <language>Python</language>
+  <offset>21</offset>
+  <length>11</length>
+</problem>
+<problem>
+  <file>file://$PROJECT_DIR$/app/chaetra/llm.py</file>
+  <line>268</line>
+  <module>StockAnalysis</module>
+  <entry_point TYPE="file" FQNAME="file://$PROJECT_DIR$/app/chaetra/llm.py" />
+  <problem_class id="GrazieInspection" severity="GRAMMAR_ERROR" attribute_key="GRAMMAR_ERROR">Grammar</problem_class>
+  <description>Use a comma before 'or' if it connects two independent clauses (unless they are closely connected and short).</description>
+  <highlighted_element>or</highlighted_element>
+  <language>Python</language>
+  <offset>36</offset>
+  <length>3</length>
+</problem>
+<problem>
+  <file>file://$PROJECT_DIR$/app/chaetra/memory.py</file>
+  <line>183</line>
+  <module>StockAnalysis</module>
+  <entry_point TYPE="file" FQNAME="file://$PROJECT_DIR$/app/chaetra/memory.py" />
+  <problem_class id="GrazieInspection" severity="GRAMMAR_ERROR" attribute_key="GRAMMAR_ERROR">Grammar</problem_class>
+  <description>The conjunction &quot;if&quot; requires the past participle matched. Or did you mean you match?</description>
+  <highlighted_element>match</highlighted_element>
+  <language>Python</language>
+  <offset>21</offset>
+  <length>5</length>
+</problem>
+<problem>
+  <file>file://$PROJECT_DIR$/app/chaetra/memory.py</file>
+  <line>249</line>
+  <module>StockAnalysis</module>
+  <entry_point TYPE="file" FQNAME="file://$PROJECT_DIR$/app/chaetra/memory.py" />
+  <problem_class id="GrazieInspection" severity="GRAMMAR_ERROR" attribute_key="GRAMMAR_ERROR">Grammar</problem_class>
+  <description>The verb 'to depend' requires the preposition '(up)on'.</description>
+  <highlighted_element>Depends for</highlighted_element>
+  <language>Python</language>
+  <offset>25</offset>
+  <length>11</length>
+</problem>
+<problem>
+  <file>file://$PROJECT_DIR$/app/chaetra/reasoning.py</file>
+  <line>56</line>
+  <module>StockAnalysis</module>
+  <entry_point TYPE="file" FQNAME="file://$PROJECT_DIR$/app/chaetra/reasoning.py" />
+  <problem_class id="GrazieInspection" severity="GRAMMAR_ERROR" attribute_key="GRAMMAR_ERROR">Grammar</problem_class>
+  <description>Possible typo: you repeated a word</description>
+  <highlighted_element>Hypotheses</highlighted_element>
+  <language>Python</language>
+  <offset>22</offset>
+  <length>10</length>
+</problem>
+<problem>
+  <file>file://$PROJECT_DIR$/app/chaetra/reasoning.py</file>
+  <line>57</line>
+  <module>StockAnalysis</module>
+  <entry_point TYPE="file" FQNAME="file://$PROJECT_DIR$/app/chaetra/reasoning.py" />
+  <problem_class id="GrazieInspection" severity="GRAMMAR_ERROR" attribute_key="GRAMMAR_ERROR">Grammar</problem_class>
+  <description>Possible typo: you repeated a word</description>
+  <highlighted_element>Hypotheses</highlighted_element>
+  <language>Python</language>
+  <offset>10</offset>
+  <length>10</length>
+</problem>
+<problem>
+  <file>file://$PROJECT_DIR$/app/services/analysis/sentiment.py</file>
+  <line>194</line>
+  <module>StockAnalysis</module>
+  <entry_point TYPE="file" FQNAME="file://$PROJECT_DIR$/app/services/analysis/sentiment.py" />
+  <problem_class id="GrazieInspection" severity="GRAMMAR_ERROR" attribute_key="GRAMMAR_ERROR">Grammar</problem_class>
+  <description>Unpaired symbol: '(' seems to be missing</description>
+  <highlighted_element>)</highlighted_element>
+  <language>Python</language>
+  <offset>99</offset>
+  <length>1</length>
+</problem>
+<problem>
+  <file>file://$PROJECT_DIR$/app/services/market_data_service.py</file>
+  <line>62</line>
+  <module>StockAnalysis</module>
+  <entry_point TYPE="file" FQNAME="file://$PROJECT_DIR$/app/services/market_data_service.py" />
+  <problem_class id="GrazieInspection" severity="GRAMMAR_ERROR" attribute_key="GRAMMAR_ERROR">Grammar</problem_class>
+  <description>Use a comma before 'and' if it connects two independent clauses (unless they are closely connected and short).</description>
+  <highlighted_element>and</highlighted_element>
+  <language>Python</language>
+  <offset>54</offset>
+  <length>4</length>
+</problem>
+<problem>
+  <file>file://$PROJECT_DIR$/app/services/user_service.py</file>
+  <line>12</line>
+  <module>StockAnalysis</module>
+  <entry_point TYPE="file" FQNAME="file://$PROJECT_DIR$/app/services/user_service.py" />
+  <problem_class id="GrazieInspection" severity="GRAMMAR_ERROR" attribute_key="GRAMMAR_ERROR">Grammar</problem_class>
+  <description>The verb 'to depend' requires the preposition '(up)on'.</description>
+  <highlighted_element>Depends for</highlighted_element>
+  <language>Python</language>
+  <offset>29</offset>
+  <length>11</length>
+</problem>
+<problem>
+  <file>file://$PROJECT_DIR$/app/services/user_service.py</file>
+  <line>109</line>
+  <module>StockAnalysis</module>
+  <entry_point TYPE="file" FQNAME="file://$PROJECT_DIR$/app/services/user_service.py" />
+  <problem_class id="GrazieInspection" severity="GRAMMAR_ERROR" attribute_key="GRAMMAR_ERROR">Grammar</problem_class>
+  <description>The verb 'depend' requires the preposition 'on' (or 'upon').</description>
+  <highlighted_element>Depends</highlighted_element>
+  <language>Python</language>
+  <offset>22</offset>
+  <length>7</length>
+</problem>
+</problems>

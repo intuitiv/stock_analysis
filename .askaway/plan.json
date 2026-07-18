@@ -1,0 +1,55 @@
+{
+  "id": "plan_1771177214889",
+  "name": "My Plan",
+  "tasks": [
+    {
+      "id": "plan_1771178627812_9174u",
+      "title": "Explain high level architecture in 2 lines",
+      "description": "Explain high level architecture in 2 lines. Be specific about the components and their interactions.",
+      "status": "in-progress",
+      "requiresReview": false,
+      "subtasks": [],
+      "createdAt": 1771178627812,
+      "updatedAt": 1771308345365,
+      "order": 0,
+      "completionNote": "**Context:** I provided a 2-line high-level architecture summary for the repo.\n\n**Progress:**\n- Gave 2-line architecture summary\n\n**Question:** What would you like me to do next? Choose or describe:\n- Run unit tests\n- Run integration tests\n- Explain a specific file (please name it)\n- Implement/modify a feature (describe goal)\n- Debug failing tests\n- Other (describe)"
+    },
+    {
+      "id": "plan_1771178646242_iljhc",
+      "title": "Give me one alternate solution",
+      "description": "",
+      "status": "pending",
+      "requiresReview": false,
+      "subtasks": [],
+      "createdAt": 1771178646242,
+      "updatedAt": 1771250907987,
+      "order": 1
+    },
+    {
+      "id": "plan_1771178637587_kg1ms",
+      "title": "Explain drawbacks",
+      "description": "",
+      "status": "pending",
+      "requiresReview": true,
+      "subtasks": [],
+      "createdAt": 1771178637587,
+      "updatedAt": 1771306651880,
+      "order": 2
+    },
+    {
+      "id": "plan_1771220645303_b1hhg",
+      "title": "next big thing",
+      "description": "",
+      "status": "pending",
+      "requiresReview": false,
+      "subtasks": [],
+      "createdAt": 1771220645303,
+      "updatedAt": 1771220645303,
+      "order": 3
+    }
+  ],
+  "activeTaskId": "plan_1771178627812_9174u",
+  "autoAdvance": true,
+  "createdAt": 1771177214889,
+  "updatedAt": 1771295273464
+}

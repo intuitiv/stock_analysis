@@ -1,0 +1,76 @@
+[tool.poetry]
+name = "naetra-stock-analysis"
+version = "0.1.0"
+description = "NAETRA: Neural Analysis Engine for Trading Research & Assessment, powered by CHAETRA"
+authors = ["Your Name <you@example.com>"] # Replace with actual author info
+readme = "README.md"
+license = "MIT" # Or your chosen license
+repository = "https://github.com/your-repo/naetra-project" # Replace with actual repo URL
+documentation = "https://your-docs-url.com" # Replace with actual docs URL
+keywords = ["stock analysis", "trading", "ai", "machine learning", "python", "naetra", "chaetra"]
+packages = [
+    { include = "app" }
+]
+
+[tool.poetry.dependencies]
+python = "^3.9"
+fastapi = "^0.104.1"
+uvicorn = {extras = ["standard"], version = "^0.24.0"}
+sqlalchemy = {extras = ["asyncio"], version = "^2.0.23"}
+alembic = "^1.12.1"
+asyncpg = "^0.29.0" # Async PostgreSQL driver
+pydantic = {extras = ["email"], version = "^2.5.2"}
+pydantic-settings = "^2.1.0"
+python-dotenv = "^1.0.0"
+redis = {extras = ["hiredis"], version = "^5.0.1"}
+sse-starlette = "^1.8.0" # For Server-Sent Events
+aiohttp = "^3.9.1"
+python-jose = {extras = ["cryptography"], version = "^3.3.0"}
+passlib = {extras = ["bcrypt"], version = "^1.7.4"}
+python-multipart = "^0.0.6" # For file uploads with FastAPI
+yfinance = "^0.1.63" # Downgraded for Python 3.9 compatibility
+ollama = "^0.1.7" # Example LLM provider
+# Add other core dependencies like numpy, pandas if directly used in core logic
+# pandas = "^2.1.4"
+numpy = "^1.26.2" # Explicitly add numpy
+pandas = "^2.2.3"
+pandas-ta = "^0.3.14b0" # Pure Python Technical Analysis Library (no C dependencies)
+aiosqlite = "^0.19.0"  # For async SQLite support
+
+[tool.poetry.group.dev.dependencies]
+pytest = "^7.4.3"
+pytest-asyncio = "^0.23.2"
+httpx = "^0.25.2" # For testing FastAPI endpoints
+pre-commit = "^3.6.0"
+mypy = "^1.7.1"
+ruff = "^0.1.7" # Linter and formatter
+black = "^23.11.0" # Formatter, ruff can also format
+isort = "^5.12.0" # Import sorter, ruff can also do this
+
+[tool.poetry.scripts]
+start-dev = "scripts.run:dev" # Example, if you create a run.py
+seed-db = "scripts.seed_data:main"
+setup-project = "scripts.setup:main" # If setup.sh is converted to Python
+
+[build-system]
+requires = ["poetry-core>=1.0.0"]
+build-backend = "poetry.core.masonry.api"
+
+[tool.ruff]
+line-length = 88
+select = ["E", "F", "W", "I", "UP", "C4", "B", "A", "RUF"] # Enable various rules
+ignore = ["E501"] # Ignore line too long if ruff handles formatting
+
+[tool.mypy]
+python_version = "3.9"
+warn_return_any = true
+warn_unused_configs = true
+ignore_missing_imports = true # Can be set to false for stricter checks
+disallow_untyped_defs = true
+
+[tool.isort]
+profile = "black"
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+pythonpath = ["."]

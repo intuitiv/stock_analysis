@@ -1,0 +1,41 @@
+{
+    "# Memory Settings": "Configuration for memory system",
+    "memory_cache_url": "redis://localhost:6379",
+    "short_term_ttl": 86400,
+    "core_memory_threshold": 0.8,
+    "validation_threshold": 3,
+
+    "# Learning Settings": "Configuration for learning system",
+    "min_pattern_confidence": 0.7,
+    "min_pattern_occurrences": 2,
+    "learning_rate": 0.1,
+
+    "# Reasoning Settings": "Configuration for reasoning system",
+    "reasoning_temperature": 0.3,
+    "min_reasoning_confidence": 0.7,
+    "max_reasoning_depth": 5,
+
+    "# Opinion Settings": "Configuration for opinion system",
+    "opinion_temperature": 0.3,
+    "min_opinion_confidence": 0.7,
+    "evidence_threshold": 3,
+
+    "# LLM Settings": "Configuration for LLM integration",
+    "llm_provider": "openai",
+    "llm_model": "gpt-4",
+    "llm_temperature": 0.7,
+    "max_tokens": 1000,
+
+    "# Cache Settings": "Configuration for caching",
+    "cache_enabled": true,
+    "cache_ttl": 3600,
+
+    "# Logging Settings": "Configuration for logging",
+    "log_level": "INFO",
+    "log_dir": "logs",
+
+    "# System Settings": "Configuration for system behavior",
+    "max_concurrent_requests": 10,
+    "request_timeout": 30,
+    "retries": 3
+}

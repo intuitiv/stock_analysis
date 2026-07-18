@@ -1,0 +1,108 @@
+# Testing Framework
+pytest==7.4.0
+pytest-asyncio==0.21.1
+pytest-cov==4.1.0
+pytest-xdist==3.3.1
+pytest-timeout==2.1.0
+pytest-mock==3.11.1
+pytest-env==1.0.1
+pytest-benchmark==4.0.0
+pytest-freezegun==0.4.2
+
+# Database Testing
+testing.postgresql==1.3.0
+asyncpg==0.28.0
+SQLAlchemy[asyncio]==2.0.19
+alembic==1.11.1
+
+# HTTP/API Testing
+aiohttp==3.8.5
+requests==2.31.0
+httpx==0.24.1
+requests-mock==1.11.0
+responses==0.23.1
+mockserver-client==2.0.0
+
+# Redis Testing
+aioredis==2.0.1
+fakeredis==2.18.0
+
+# Performance Testing
+locust==2.16.1
+psutil==5.9.5
+memory_profiler==0.61.0
+
+# Mock Data Generation
+Faker==19.2.0
+hypothesis==6.82.6
+
+# Test Result Reporting
+allure-pytest==2.13.2
+pytest-html==3.2.0
+pytest-json-report==1.5.0
+
+# Code Quality & Coverage
+coverage==7.2.7
+black==23.7.0
+mypy==1.4.1
+pylint==2.17.4
+flake8==6.0.0
+bandit==1.7.5
+
+# Debug Tools
+ipdb==0.13.13
+icecream==2.1.3
+rich==13.4.2
+
+# Documentation Testing
+sphinx==7.0.1
+sphinx-rtd-theme==1.2.2
+doc8==1.1.1
+
+# Utilities
+python-dotenv==1.0.0
+pyyaml==6.0.1
+dataclasses-json==0.5.9
+jsonschema==4.18.4
+
+# Type Checking
+types-aiofiles==23.1.0.5
+types-PyYAML==6.0.12.11
+types-redis==4.6.0.3
+types-requests==2.31.0.2
+types-setuptools==68.0.0.3
+
+# Security Testing
+safety==2.3.5
+owasp-zap-api-python==0.4.0
+cryptography==41.0.2
+
+# Monitoring & Profiling
+opentelemetry-api==1.19.0
+opentelemetry-sdk==1.19.0
+pyinstrument==4.5.1
+gprof2dot==2022.7.29
+
+# Concurrency Testing
+pytest-asyncio==0.21.1
+pytest-repeat==0.9.1
+asyncmock==0.4.2
+
+# Dependencies needed for mocking external services
+faker-credit-score==0.3.0
+faker-commerce==1.0.3
+faker-vehicle==0.2.0
+
+# Testing Environment Requirements
+docker-compose>=1.29.2
+docker>=5.0.0
+
+# Optional: Dependencies for specific ML/AI testing
+numpy==1.24.3
+pandas==2.0.3
+scikit-learn==1.3.0
+torch==2.0.1  # Only if needed for specific ML testing
+transformers==4.31.0  # Only if needed for testing transformer models
+
+# Constraints file to ensure compatibility
+-c constraints.txt

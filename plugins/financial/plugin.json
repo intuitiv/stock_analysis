@@ -1,0 +1,26 @@
+{
+    "name": "financial_analysis",
+    "version": "1.0.0",
+    "description": "Financial analysis plugin for CHAETRA",
+    "domain": "finance",
+    "entry_point": "plugin",
+    "config_schema": {
+        "api_key": {
+            "type": "str",
+            "required": true,
+            "description": "API key for financial data provider"
+        },
+        "market_data_provider": {
+            "type": "str",
+            "required": true,
+            "description": "Market data provider to use",
+            "allowed_values": ["alpha_vantage", "yahoo_finance", "finnhub"]
+        },
+        "cache_ttl": {
+            "type": "int",
+            "required": false,
+            "default": 3600,
+            "description": "Cache TTL for financial data"
+        }
+    }
+}
